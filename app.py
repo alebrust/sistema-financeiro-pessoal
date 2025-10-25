@@ -1,18 +1,17 @@
-# --- ARQUIVO: app.py (VERSÃO 38 - FORMATAÇÃO BRASILEIRA DE DATA E NÚMERO) ---
+# --- ARQUIVO: app.py (VERSÃO 39 - FORMATAÇÃO MANUAL DE MOEDA) ---
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
 from collections import defaultdict
-import locale # Importamos o módulo locale
 
-# --- MUDANÇA 1: CONFIGURANDO A LOCALIDADE PARA O BRASIL ---
-# Isso fará com que a formatação de números e moeda use o padrão brasileiro.
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except locale.Error:
-    st.error("Localidade 'pt_BR.UTF-8' não encontrada. A formatação de moeda pode não estar correta.")
+# --- MUDANÇA 1: REMOVEMOS o locale e CRIAMOS nossa própria função ---
+def formatar_moeda(valor):
+    """Formata um valor float para o padrão monetário brasileiro (R$ 1.234,56)."""
+    # Esta é uma maneira robusta de garantir a formatação correta
+    # independentemente da localidade do sistema.
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # --- Configuração da Página ---
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
@@ -42,9 +41,7 @@ with tab_dashboard:
                     conta_selecionada_nome = st.selectbox("Conta", [c.nome for c in contas_disponiveis])
                     descricao = st.text_input("Descrição")
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-                    # MUDANÇA 2: Adicionamos o formato DD/MM/YYYY ao date_input
                     data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
-                    
                     submitted = st.form_submit_button("Registrar")
                     if submitted:
                         if not descricao: st.error("A descrição é obrigatória.")
@@ -66,18 +63,17 @@ with tab_dashboard:
             
             st.subheader("Patrimônio por Categoria")
             for categoria, saldo in saldos_agrupados.items():
-                # MUDANÇA 3: Usamos locale.currency para formatar corretamente
-                st.metric(label=categoria, value=locale.currency(saldo, grouping=True))
+                # MUDANÇA 2: Usamos nossa nova função
+                st.metric(label=categoria, value=formatar_moeda(saldo))
             
             st.divider()
             patrimonio_total = sum(saldos_agrupados.values())
-            st.metric(label="**Patrimônio Total**", value=locale.currency(patrimonio_total, grouping=True))
+            st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
         else:
             st.metric(label="**Patrimônio Total**", value="R$ 0,00")
 
     with col1:
         st.header("Realizar Transferência")
-        # ... (código de transferência sem mudanças na lógica, mas a exibição de valores será afetada pela configuração do locale)
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
             with st.form("transfer_form", clear_on_submit=True):
@@ -110,7 +106,7 @@ with tab_transacoes:
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
         dados_df = []
         for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
-            valor_formatado = locale.currency(t.valor, grouping=True)
+            valor_formatado = formatar_moeda(t.valor)
             dados_df.append({
                 "Data": t.data.strftime("%d/%m/%Y"),
                 "Conta": mapa_contas.get(t.id_conta, "Conta Removida"),
@@ -126,7 +122,6 @@ with tab_contas:
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
     with col_contas2:
-        # ... (código de adicionar conta sem mudanças na lógica)
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta")
             tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
@@ -159,12 +154,10 @@ with tab_contas:
                 if conta.logo_url: st.image(conta.logo_url, width=65)
                 else: st.write("🏦") 
             with expander_col:
-                # MUDANÇA 3 (Continuação): Usamos locale.currency na exibição dos saldos
-                saldo_conta_formatado = locale.currency(conta.saldo, grouping=True)
+                saldo_conta_formatado = formatar_moeda(conta.saldo)
                 with st.expander(f"{conta.nome} - {saldo_conta_formatado}"):
-                    # ... (código interno do expander sem mudanças na lógica)
                     st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
-                    if isinstance(conta, ContaCorrente): st.write(f"**Limite:** {locale.currency(conta.limite_cheque_especial, grouping=True)}")
+                    if isinstance(conta, ContaCorrente): st.write(f"**Limite:** {formatar_moeda(conta.limite_cheque_especial)}")
                     elif isinstance(conta, ContaInvestimento): st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
                     st.divider()
                     with st.form(f"edit_form_{conta.id_conta}"):
