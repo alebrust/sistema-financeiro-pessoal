@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 27 - EXIBIÇÃO CORRETA DO LOGO) ---
+# --- ARQUIVO: app.py (VERSÃO 28 - CORREÇÃO FINAL DA EXIBIÇÃO DO LOGO COM HTML) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -30,14 +30,15 @@ with col1:
     else:
         tab_cc, tab_ci = st.tabs(["Contas Correntes", "Contas de Investimento"])
 
-        # --- NOVA FUNÇÃO AUXILIAR ---
+        # --- FUNÇÃO AUXILIAR CORRIGIDA ---
         def criar_titulo_com_logo(conta):
-            """Cria uma string de Markdown para o título do expander, incluindo o logo."""
+            """Cria uma string de Markdown para o título do expander, usando HTML para o logo."""
             if conta.logo_url:
-                # Usamos Markdown para exibir a imagem. A sintaxe {width=25} define o tamanho.
-                return f"![logo]({conta.logo_url})&nbsp;&nbsp;**{conta.nome}** - R$ {conta.saldo:,.2f}"
+                # Usamos uma tag <img> de HTML para ter controle sobre o tamanho da imagem.
+                # O style 'vertical-align:middle' ajuda a alinhar o logo com o texto.
+                logo_html = f'<img src="{conta.logo_url}" width="25" style="vertical-align:middle; margin-right:5px;">'
+                return f"{logo_html} **{conta.nome}** - R$ {conta.saldo:,.2f}"
             else:
-                # Se não houver logo, retorna apenas o texto em negrito.
                 return f"**{conta.nome}** - R$ {conta.saldo:,.2f}"
 
         def render_editor_conta(conta):
@@ -76,17 +77,16 @@ with col1:
         with tab_cc:
             if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
             for conta in contas_correntes:
-                # MUDANÇA: Usamos a nova função para criar o título
                 titulo = criar_titulo_com_logo(conta)
-                with st.expander(titulo):
+                # O último argumento 'unsafe_allow_html=True' é necessário para renderizar o HTML
+                with st.expander(titulo, expanded=False):
                     render_editor_conta(conta)
 
         with tab_ci:
             if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
             for conta in contas_investimento:
-                # MUDANÇA: Usamos a nova função para criar o título
                 titulo = criar_titulo_com_logo(conta)
-                with st.expander(titulo):
+                with st.expander(titulo, expanded=False):
                     render_editor_conta(conta)
     
     # ... (Resto do código não precisa de mudanças)
