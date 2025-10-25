@@ -9,7 +9,7 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 
 # --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas("dados_contas.json")
+    st.session_state.gerenciador = GerenciadorContas("dados_v2.json")
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
