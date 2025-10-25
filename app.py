@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 30 - CORREÇÃO FINAL, REMOVENDO FUNÇÃO AUXILIAR) ---
+# --- ARQUIVO: app.py (VERSÃO 31 - LOGOS NA VISÃO PRINCIPAL) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -30,59 +30,42 @@ with col1:
     else:
         tab_cc, tab_ci = st.tabs(["Contas Correntes", "Contas de Investimento"])
 
-        with tab_cc:
-            if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
-            for conta in contas_correntes:
-                with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    # --- CÓDIGO REPETIDO, MAS SEGURO ---
-                    col_logo, col_titulo = st.columns([1, 4])
-                    with col_logo:
-                        if conta.logo_url: st.image(conta.logo_url, width=60)
-                    with col_titulo:
-                        st.write(f"**Tipo:** Conta Corrente")
-                        st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
-                    st.divider()
-                    with st.form(f"edit_form_{conta.id_conta}"):
-                        st.write("Editar Conta")
-                        novo_nome = st.text_input("Nome da conta", value=conta.nome)
-                        nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
-                        novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
-                        if st.form_submit_button("Salvar Alterações"):
-                            nome_mudou = conta.editar_nome(novo_nome)
-                            logo_mudou = conta.editar_logo_url(nova_logo_url)
-                            limite_mudou = conta.editar_limite(novo_limite)
-                            if nome_mudou or logo_mudou or limite_mudou:
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"Conta '{novo_nome}' atualizada!")
-                                st.rerun()
-                    if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                            st.session_state.gerenciador.salvar_dados()
-                            st.toast(f"Conta '{conta.nome}' removida!")
-                            st.rerun()
+        # Função auxiliar para renderizar o conteúdo de cada conta
+        def render_conta_item(conta):
+            # MUDANÇA PRINCIPAL: Criamos colunas para o logo e o expander
+            logo_col, expander_col = st.columns([1, 6]) # Coluna do logo menor
 
-        with tab_ci:
-            if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
-            for conta in contas_investimento:
+            with logo_col:
+                if conta.logo_url:
+                    st.image(conta.logo_url, width=50)
+                else:
+                    # Espaço reservado ou ícone padrão se não houver logo
+                    st.write("🏦") 
+
+            with expander_col:
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    # --- CÓDIGO REPETIDO, MAS SEGURO ---
-                    col_logo, col_titulo = st.columns([1, 4])
-                    with col_logo:
-                        if conta.logo_url: st.image(conta.logo_url, width=60)
-                    with col_titulo:
-                        st.write(f"**Tipo:** Conta Investimento")
+                    # O conteúdo do expander permanece o mesmo
+                    st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
+                    if isinstance(conta, ContaCorrente):
+                        st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
+                    elif isinstance(conta, ContaInvestimento):
                         st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
                     st.divider()
                     with st.form(f"edit_form_{conta.id_conta}"):
                         st.write("Editar Conta")
                         novo_nome = st.text_input("Nome da conta", value=conta.nome)
                         nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
-                        novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
+                        if isinstance(conta, ContaCorrente):
+                            novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
+                        elif isinstance(conta, ContaInvestimento):
+                            novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
                         if st.form_submit_button("Salvar Alterações"):
                             nome_mudou = conta.editar_nome(novo_nome)
                             logo_mudou = conta.editar_logo_url(nova_logo_url)
-                            tipo_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
-                            if nome_mudou or logo_mudou or tipo_mudou:
+                            atributo_especifico_mudou = False
+                            if isinstance(conta, ContaCorrente): atributo_especifico_mudou = conta.editar_limite(novo_limite)
+                            elif isinstance(conta, ContaInvestimento): atributo_especifico_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
+                            if nome_mudou or logo_mudou or atributo_especifico_mudou:
                                 st.session_state.gerenciador.salvar_dados()
                                 st.toast(f"Conta '{novo_nome}' atualizada!")
                                 st.rerun()
@@ -91,6 +74,18 @@ with col1:
                             st.session_state.gerenciador.salvar_dados()
                             st.toast(f"Conta '{conta.nome}' removida!")
                             st.rerun()
+        
+        with tab_cc:
+            if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
+            for conta in contas_correntes:
+                render_conta_item(conta)
+                st.write("") # Adiciona um pequeno espaço vertical entre as contas
+
+        with tab_ci:
+            if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
+            for conta in contas_investimento:
+                render_conta_item(conta)
+                st.write("") # Adiciona um pequeno espaço vertical entre as contas
     
     # ... (Resto do código não precisa de mudanças)
     st.header("Realizar Transferência")
@@ -148,7 +143,7 @@ with col2:
                 if nova_conta:
                     st.session_state.gerenciador.adicionar_conta(nova_conta)
                     st.session_state.gerenciador.salvar_dados()
-                    st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
+                    st.success(f"Conta '{nome_caixa}' adicionada com sucesso!")
                     st.rerun()
     st.header("Resumo Financeiro")
     if todas_as_contas:
