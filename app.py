@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 10 - COM LIMPEZA DE FORMULÁRIO) ---
+# --- ARQUIVO: app.py (VERSÃO 11 - CORREÇÃO DA LIMPEZA DE FORMULÁRIO) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -13,21 +13,6 @@ gerenciador = st.session_state.gerenciador
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
-
-# --- NOVA FUNÇÃO DE CALLBACK PARA LIMPEZA ---
-def limpar_formulario_adicionar():
-    """Limpa os campos do formulário de adição no session_state."""
-    # O Streamlit armazena o valor de cada widget com uma "key".
-    # Para limpar, basta deletar essas chaves do session_state.
-    # Usamos um loop e 'pop' com um valor padrão para evitar erros se a chave não existir.
-    chaves_para_limpar = [
-        "add_nome_conta", 
-        "add_saldo_inicial", 
-        "add_limite", 
-        "add_tipo_invest"
-    ]
-    for key in chaves_para_limpar:
-        st.session_state.pop(key, None)
 
 # --- Colunas Principais ---
 col1, col2 = st.columns([1, 1])
@@ -60,7 +45,6 @@ with col1:
                     st.rerun()
 
     st.header("Realizar Transferência")
-    # ... (código de transferência sem mudanças) ...
     if len(contas) >= 2:
         nomes_contas = [c.nome for c in contas]
         conta_origem_nome = st.selectbox("De:", nomes_contas, key="origem")
@@ -83,26 +67,22 @@ with col1:
 # --- COLUNA DA DIREITA: Ações e Resumo ---
 with col2:
     st.header("Ações")
-    with st.form("add_account_form", clear_on_submit=False): # clear_on_submit=False para controle manual
+    # MUDANÇA IMPORTANTE: clear_on_submit=True
+    with st.form("add_account_form", clear_on_submit=True):
         st.subheader("Adicionar Nova Conta")
         tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
-        # Adicionamos 'key' a cada widget para poder limpá-los
-        nome_conta = st.text_input("Nome da Conta", key="add_nome_conta")
-        saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f", key="add_saldo_inicial")
+        nome_conta = st.text_input("Nome da Conta")
+        saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
         
         if tipo_conta == "Conta Corrente":
-            limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f", key="add_limite")
+            limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
         else:
-            tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)", key="add_tipo_invest")
+            tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
 
-        # MUDANÇA IMPORTANTE: Adicionamos o 'on_click'
-        submitted_add = st.form_submit_button(
-            "Adicionar Conta",
-            on_click=limpar_formulario_adicionar # Chama a função de limpeza quando clicado
-        )
+        # MUDANÇA IMPORTANTE: Removemos o on_click
+        submitted_add = st.form_submit_button("Adicionar Conta")
 
         if submitted_add:
-            # A lógica de adicionar a conta permanece a mesma
             if not nome_conta:
                 st.error("O nome da conta é obrigatório.")
             else:
@@ -119,10 +99,12 @@ with col2:
                     gerenciador.adicionar_conta(nova_conta)
                     gerenciador.salvar_dados()
                     st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
+                    # O st.rerun() não é mais estritamente necessário aqui, 
+                    # pois o Streamlit já recarrega a página após a submissão do formulário.
+                    # Mas podemos manter para garantir consistência.
                     st.rerun()
 
     st.header("Resumo Financeiro")
-    # ... (código do resumo sem mudanças) ...
     if contas:
         patrimonio_total = sum(c.saldo for c in contas)
         st.metric(label="**Patrimônio Total**", value=f"R$ {patrimonio_total:,.2f}")
