@@ -137,11 +137,11 @@ with tab_contas:
         
         for conta in todas_as_contas:
             # --- MUDANÇA PRINCIPAL AQUI ---
-            logo_col, expander_col = st.columns([1, 5]) # Ajuste na proporção
+            logo_col, expander_col = st.columns([1, 6]) # Ajuste na proporção
             
             with logo_col:
                 if conta.logo_url:
-                    st.image(conta.logo_url, width=65) # Aumentamos o tamanho
+                    st.image(conta.logo_url, width=85) # Aumentamos o tamanho
                 else:
                     st.write("🏦") 
 
