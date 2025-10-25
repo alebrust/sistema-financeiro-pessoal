@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 23 - EDIÇÃO DE ATRIBUTOS ESPECÍFICOS) ---
+# --- ARQUIVO: app.py (VERSÃO 25 - EXIBIÇÃO E EDIÇÃO DE LOGOS) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -30,61 +30,63 @@ with col1:
     else:
         tab_cc, tab_ci = st.tabs(["Contas Correntes", "Contas de Investimento"])
 
+        # Função auxiliar para evitar repetição de código
+        def render_editor_conta(conta):
+            # MUDANÇA: Usamos colunas para colocar o logo ao lado do título
+            col_logo, col_titulo = st.columns([1, 5])
+            if conta.logo_url:
+                with col_logo:
+                    st.image(conta.logo_url, width=50)
+            with col_titulo:
+                st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
+                if isinstance(conta, ContaCorrente):
+                    st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
+                elif isinstance(conta, ContaInvestimento):
+                    st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
+            
+            with st.form(f"edit_form_{conta.id_conta}"):
+                st.write("Editar Conta")
+                novo_nome = st.text_input("Nome da conta", value=conta.nome)
+                # NOVO CAMPO PARA URL DO LOGO
+                nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
+
+                # Campos específicos por tipo de conta
+                if isinstance(conta, ContaCorrente):
+                    novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
+                elif isinstance(conta, ContaInvestimento):
+                    novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
+
+                if st.form_submit_button("Salvar Alterações"):
+                    nome_mudou = conta.editar_nome(novo_nome)
+                    logo_mudou = conta.editar_logo_url(nova_logo_url)
+                    atributo_especifico_mudou = False
+                    if isinstance(conta, ContaCorrente):
+                        atributo_especifico_mudou = conta.editar_limite(novo_limite)
+                    elif isinstance(conta, ContaInvestimento):
+                        atributo_especifico_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
+                    
+                    if nome_mudou or logo_mudou or atributo_especifico_mudou:
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast(f"Conta '{novo_nome}' atualizada!")
+                        st.rerun()
+
+            if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
+                if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                    st.session_state.gerenciador.salvar_dados()
+                    st.toast(f"Conta '{conta.nome}' removida!")
+                    st.rerun()
+
         with tab_cc:
             if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
             for conta in contas_correntes:
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
-                    
-                    with st.form(f"edit_form_{conta.id_conta}"):
-                        st.write("Editar Conta Corrente")
-                        novo_nome = st.text_input("Nome da conta", value=conta.nome)
-                        # NOVO CAMPO DE EDIÇÃO
-                        novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
-                        
-                        if st.form_submit_button("Salvar Alterações"):
-                            # LÓGICA DE EDIÇÃO ATUALIZADA
-                            nome_mudou = conta.editar_nome(novo_nome)
-                            limite_mudou = conta.editar_limite(novo_limite)
-                            if nome_mudou or limite_mudou:
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"Conta '{novo_nome}' atualizada!")
-                                st.rerun()
-
-                    if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                        # ... (lógica de remoção sem mudanças)
-                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                            st.session_state.gerenciador.salvar_dados()
-                            st.toast(f"Conta '{conta.nome}' removida!")
-                            st.rerun()
+                    render_editor_conta(conta)
 
         with tab_ci:
             if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
             for conta in contas_investimento:
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
-                    
-                    with st.form(f"edit_form_{conta.id_conta}"):
-                        st.write("Editar Conta de Investimento")
-                        novo_nome = st.text_input("Nome da conta", value=conta.nome)
-                        # NOVO CAMPO DE EDIÇÃO
-                        novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
-
-                        if st.form_submit_button("Salvar Alterações"):
-                            # LÓGICA DE EDIÇÃO ATUALIZADA
-                            nome_mudou = conta.editar_nome(novo_nome)
-                            tipo_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
-                            if nome_mudou or tipo_mudou:
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"Conta '{novo_nome}' atualizada!")
-                                st.rerun()
-
-                    if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                        # ... (lógica de remoção sem mudanças)
-                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                            st.session_state.gerenciador.salvar_dados()
-                            st.toast(f"Conta '{conta.nome}' removida!")
-                            st.rerun()
+                    render_editor_conta(conta)
     
     # ... (Resto do código da coluna 1 e coluna 2 não precisa de mudanças)
     st.header("Realizar Transferência")
@@ -117,35 +119,48 @@ with col1:
 with col2:
     st.header("Ações")
     st.subheader("Adicionar Nova Conta")
+    
     tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"], index=0, key='add_tipo_conta')
     nome_conta = st.text_input("Nome da Conta", key="add_nome")
+    # NOVO CAMPO NO FORMULÁRIO DE ADIÇÃO
+    logo_url_add = st.text_input("URL do Logo (Opcional)", key="add_logo")
     saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f", key="add_saldo")
+    
     if tipo_conta == "Conta Corrente":
         limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f", key="add_limite")
     else:
         tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)", key="add_tipo_invest")
+
     if st.button("Adicionar Conta", use_container_width=True):
         if not nome_conta:
             st.error("O nome da conta é obrigatório.")
         else:
             nova_conta = None
+            # LÓGICA DE CRIAÇÃO ATUALIZADA
             if tipo_conta == "Conta Corrente":
-                nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite)
+                nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
             else:
                 if not tipo_invest:
                     st.error("O tipo de investimento é obrigatório.")
                 else:
-                    nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest)
+                    nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest, logo_url=logo_url_add)
+            
             if nova_conta:
                 st.session_state.gerenciador.adicionar_conta(nova_conta)
                 st.session_state.gerenciador.salvar_dados()
                 st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
+                
+                # Limpeza dos campos
                 st.session_state.add_nome = ""
+                st.session_state.add_logo = ""
                 st.session_state.add_saldo = 0.0
                 if 'add_limite' in st.session_state: st.session_state.add_limite = 0.0
                 if 'add_tipo_invest' in st.session_state: st.session_state.add_tipo_invest = ""
+                
                 st.rerun()
+
     st.header("Resumo Financeiro")
+    # ... (código do resumo sem mudanças)
     if todas_as_contas:
         saldos_agrupados = defaultdict(float)
         for conta in todas_as_contas:
