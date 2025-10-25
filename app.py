@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 29 - CORREÇÃO FINAL DA EXIBIÇÃO DO LOGO) ---
+# --- ARQUIVO: app.py (VERSÃO 30 - CORREÇÃO FINAL, REMOVENDO FUNÇÃO AUXILIAR) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -30,67 +30,67 @@ with col1:
     else:
         tab_cc, tab_ci = st.tabs(["Contas Correntes", "Contas de Investimento"])
 
-        # Função auxiliar para renderizar o conteúdo do expander
-        def render_editor_conta(conta):
-            # MUDANÇA: Usamos colunas para colocar o logo ao lado dos detalhes
-            col_logo, col_titulo = st.columns([1, 4]) # Coluna do logo menor
-            
-            with col_logo:
-                if conta.logo_url:
-                    st.image(conta.logo_url, width=60) # Usamos st.image para exibir o logo
-            
-            with col_titulo:
-                st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
-                if isinstance(conta, ContaCorrente):
-                    st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
-                elif isinstance(conta, ContaInvestimento):
-                    st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
-
-            st.divider() # Linha divisória para separar os detalhes do formulário de edição
-
-            with st.form(f"edit_form_{conta.id_conta}"):
-                st.write("Editar Conta")
-                novo_nome = st.text_input("Nome da conta", value=conta.nome)
-                nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
-                
-                if isinstance(conta, ContaCorrente):
-                    novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
-                elif isinstance(conta, ContaInvestimento):
-                    novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
-
-                if st.form_submit_button("Salvar Alterações"):
-                    nome_mudou = conta.editar_nome(novo_nome)
-                    logo_mudou = conta.editar_logo_url(nova_logo_url)
-                    atributo_especifico_mudou = False
-                    if isinstance(conta, ContaCorrente):
-                        atributo_especifico_mudou = conta.editar_limite(novo_limite)
-                    elif isinstance(conta, ContaInvestimento):
-                        atributo_especifico_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
-                    
-                    if nome_mudou or logo_mudou or atributo_especifico_mudou:
-                        st.session_state.gerenciador.salvar_dados()
-                        st.toast(f"Conta '{novo_nome}' atualizada!")
-                        st.rerun()
-
-            if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                    st.session_state.gerenciador.salvar_dados()
-                    st.toast(f"Conta '{conta.nome}' removida!")
-                    st.rerun()
-
         with tab_cc:
             if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
             for conta in contas_correntes:
-                # MUDANÇA: O título do expander volta a ser apenas texto
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    render_editor_conta(conta)
+                    # --- CÓDIGO REPETIDO, MAS SEGURO ---
+                    col_logo, col_titulo = st.columns([1, 4])
+                    with col_logo:
+                        if conta.logo_url: st.image(conta.logo_url, width=60)
+                    with col_titulo:
+                        st.write(f"**Tipo:** Conta Corrente")
+                        st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
+                    st.divider()
+                    with st.form(f"edit_form_{conta.id_conta}"):
+                        st.write("Editar Conta")
+                        novo_nome = st.text_input("Nome da conta", value=conta.nome)
+                        nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
+                        novo_limite = st.number_input("Limite do Cheque Especial", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
+                        if st.form_submit_button("Salvar Alterações"):
+                            nome_mudou = conta.editar_nome(novo_nome)
+                            logo_mudou = conta.editar_logo_url(nova_logo_url)
+                            limite_mudou = conta.editar_limite(novo_limite)
+                            if nome_mudou or logo_mudou or limite_mudou:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Conta '{novo_nome}' atualizada!")
+                                st.rerun()
+                    if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
+                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"Conta '{conta.nome}' removida!")
+                            st.rerun()
 
         with tab_ci:
             if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
             for conta in contas_investimento:
-                # MUDANÇA: O título do expander volta a ser apenas texto
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    render_editor_conta(conta)
+                    # --- CÓDIGO REPETIDO, MAS SEGURO ---
+                    col_logo, col_titulo = st.columns([1, 4])
+                    with col_logo:
+                        if conta.logo_url: st.image(conta.logo_url, width=60)
+                    with col_titulo:
+                        st.write(f"**Tipo:** Conta Investimento")
+                        st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
+                    st.divider()
+                    with st.form(f"edit_form_{conta.id_conta}"):
+                        st.write("Editar Conta")
+                        novo_nome = st.text_input("Nome da conta", value=conta.nome)
+                        nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
+                        novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
+                        if st.form_submit_button("Salvar Alterações"):
+                            nome_mudou = conta.editar_nome(novo_nome)
+                            logo_mudou = conta.editar_logo_url(nova_logo_url)
+                            tipo_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
+                            if nome_mudou or logo_mudou or tipo_mudou:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Conta '{novo_nome}' atualizada!")
+                                st.rerun()
+                    if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
+                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"Conta '{conta.nome}' removida!")
+                            st.rerun()
     
     # ... (Resto do código não precisa de mudanças)
     st.header("Realizar Transferência")
