@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 11 - CORREÇÃO DA LIMPEZA DE FORMULÁRIO) ---
+# --- ARQUIVO: app.py (VERSÃO 12 - A SOLUÇÃO FINAL E SIMPLIFICADA) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -7,9 +7,11 @@ from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimen
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 # --- Inicialização do Sistema ---
+# Esta é a maneira correta de inicializar e persistir um objeto no Streamlit.
+# Ele só cria um novo Gerenciador na PRIMEIRA vez que o app é aberto.
+# Em todas as outras interações, ele reutiliza o mesmo objeto.
 if 'gerenciador' not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_contas.json")
-gerenciador = st.session_state.gerenciador
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
@@ -21,7 +23,8 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.header("Painel de Contas")
     
-    contas = gerenciador.contas
+    # Sempre pegamos a lista de contas do gerenciador que está no session_state
+    contas = st.session_state.gerenciador.contas
     if not contas:
         st.warning("Nenhuma conta encontrada. Adicione uma nova conta no painel ao lado.")
     
@@ -31,16 +34,16 @@ with col1:
             st.write(f"**ID:** `{conta.id_conta}`")
             
             with st.form(f"edit_form_{conta.id_conta}"):
-                novo_nome = st.text_input("Novo nome da conta", value=conta.nome, key=f"edit_name_{conta.id_conta}")
+                novo_nome = st.text_input("Novo nome da conta", value=conta.nome)
                 if st.form_submit_button("Salvar Alterações"):
                     if conta.editar_nome(novo_nome):
-                        gerenciador.salvar_dados()
+                        st.session_state.gerenciador.salvar_dados()
                         st.toast(f"Conta '{novo_nome}' atualizada!")
-                        st.rerun()
+                        st.rerun() # Rerun aqui é seguro pois a edição é no objeto já existente
             
             if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                if gerenciador.remover_conta(conta.id_conta):
-                    gerenciador.salvar_dados()
+                if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                    st.session_state.gerenciador.salvar_dados()
                     st.toast(f"Conta '{conta.nome}' removida!")
                     st.rerun()
 
@@ -55,8 +58,8 @@ with col1:
             id_origem = next((c.id_conta for c in contas if c.nome == conta_origem_nome), None)
             id_destino = next((c.id_conta for c in contas if c.nome == conta_destino_nome), None)
             if id_origem and id_destino:
-                if gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
-                    gerenciador.salvar_dados()
+                if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
+                    st.session_state.gerenciador.salvar_dados()
                     st.success("Transferência realizada com sucesso!")
                     st.rerun()
                 else:
@@ -67,7 +70,6 @@ with col1:
 # --- COLUNA DA DIREITA: Ações e Resumo ---
 with col2:
     st.header("Ações")
-    # MUDANÇA IMPORTANTE: clear_on_submit=True
     with st.form("add_account_form", clear_on_submit=True):
         st.subheader("Adicionar Nova Conta")
         tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
@@ -79,7 +81,6 @@ with col2:
         else:
             tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
 
-        # MUDANÇA IMPORTANTE: Removemos o on_click
         submitted_add = st.form_submit_button("Adicionar Conta")
 
         if submitted_add:
@@ -96,13 +97,12 @@ with col2:
                         nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest)
                 
                 if nova_conta:
-                    gerenciador.adicionar_conta(nova_conta)
-                    gerenciador.salvar_dados()
+                    # AÇÃO CORRETA: Modificar o objeto que está DENTRO do session_state
+                    st.session_state.gerenciador.adicionar_conta(nova_conta)
+                    st.session_state.gerenciador.salvar_dados()
                     st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
-                    # O st.rerun() não é mais estritamente necessário aqui, 
-                    # pois o Streamlit já recarrega a página após a submissão do formulário.
-                    # Mas podemos manter para garantir consistência.
-                    st.rerun()
+                    # REMOVEMOS O RERUN DAQUI. O próprio Streamlit vai recarregar a página
+                    # de forma mais inteligente após a submissão do formulário.
 
     st.header("Resumo Financeiro")
     if contas:
