@@ -10,7 +10,7 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 
 if 'gerenciador' not in st.session_state:
     # IMPORTANTE: Se você teve o bug de duplicação, mude para 'dados_v4.json' para resetar.
-    st.session_state.gerenciador = GerenciadorContas("dados_v3.json")
+    st.session_state.gerenciador = GerenciadorContas("dados_v4.json")
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
