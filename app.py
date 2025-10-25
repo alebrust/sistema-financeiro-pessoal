@@ -1,42 +1,61 @@
-# --- ARQUIVO: app.py (VERSÃO 37 - RESTAURANDO FUNCIONALIDADES) ---
+# --- ARQUIVO: app.py (VERSÃO 38 - FORMATAÇÃO BRASILEIRA DE DATA E NÚMERO) ---
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
 from collections import defaultdict
+import locale # Importamos o módulo locale
 
+# --- MUDANÇA 1: CONFIGURANDO A LOCALIDADE PARA O BRASIL ---
+# Isso fará com que a formatação de números e moeda use o padrão brasileiro.
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except locale.Error:
+    st.error("Localidade 'pt_BR.UTF-8' não encontrada. A formatação de moeda pode não estar correta.")
+
+# --- Configuração da Página ---
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
+# --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
-    # IMPORTANTE: Se você teve o bug de duplicação, mude para 'dados_v4.json' para resetar.
-    st.session_state.gerenciador = GerenciadorContas("dados_v4.json")
+    st.session_state.gerenciador = GerenciadorContas("dados_v3.json")
 
+# --- Título Principal ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
+# --- ABAS PRINCIPAIS DA APLICAÇÃO ---
 tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 Histórico de Transações", "🏦 Contas"])
 
+# --- ABA 1: DASHBOARD ---
 with tab_dashboard:
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
         with st.expander("💸 Registrar Nova Transação", expanded=True):
             contas_disponiveis = st.session_state.gerenciador.contas
-            if not contas_disponiveis: st.warning("Crie uma conta na aba 'Contas' para começar.")
+            if not contas_disponiveis:
+                st.warning("Crie uma conta na aba 'Contas' para começar.")
             else:
                 with st.form("new_transaction_form", clear_on_submit=True):
                     tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"])
                     conta_selecionada_nome = st.selectbox("Conta", [c.nome for c in contas_disponiveis])
                     descricao = st.text_input("Descrição")
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-                    data_transacao = st.date_input("Data", value=datetime.today())
-                    if st.form_submit_button("Registrar"):
+                    # MUDANÇA 2: Adicionamos o formato DD/MM/YYYY ao date_input
+                    data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+                    
+                    submitted = st.form_submit_button("Registrar")
+                    if submitted:
                         if not descricao: st.error("A descrição é obrigatória.")
                         else:
                             conta_id = next((c.id_conta for c in contas_disponiveis if c.nome == conta_selecionada_nome), None)
                             sucesso = st.session_state.gerenciador.registrar_transacao(id_conta=conta_id, descricao=descricao, valor=valor, tipo=tipo_transacao, data_transacao=data_transacao)
-                            if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
-                            else: st.error("Falha ao registrar. Saldo insuficiente?")
+                            if sucesso:
+                                st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
+                            else:
+                                st.error("Falha ao registrar. Saldo insuficiente?")
+        
         st.header("Resumo Financeiro")
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
@@ -44,13 +63,21 @@ with tab_dashboard:
             for conta in todas_as_contas:
                 if isinstance(conta, ContaCorrente): saldos_agrupados["Contas Correntes"] += conta.saldo
                 elif isinstance(conta, ContaInvestimento): saldos_agrupados[conta.tipo_investimento] += conta.saldo
+            
             st.subheader("Patrimônio por Categoria")
-            for categoria, saldo in saldos_agrupados.items(): st.metric(label=categoria, value=f"R$ {saldo:,.2f}")
+            for categoria, saldo in saldos_agrupados.items():
+                # MUDANÇA 3: Usamos locale.currency para formatar corretamente
+                st.metric(label=categoria, value=locale.currency(saldo, grouping=True))
+            
             st.divider()
-            patrimonio_total = sum(saldos_agrupados.values()); st.metric(label="**Patrimônio Total**", value=f"R$ {patrimonio_total:,.2f}")
-        else: st.metric(label="**Patrimônio Total**", value="R$ 0,00")
+            patrimonio_total = sum(saldos_agrupados.values())
+            st.metric(label="**Patrimônio Total**", value=locale.currency(patrimonio_total, grouping=True))
+        else:
+            st.metric(label="**Patrimônio Total**", value="R$ 0,00")
+
     with col1:
         st.header("Realizar Transferência")
+        # ... (código de transferência sem mudanças na lógica, mas a exibição de valores será afetada pela configuração do locale)
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
             with st.form("transfer_form", clear_on_submit=True):
@@ -61,7 +88,8 @@ with tab_dashboard:
                     opcoes_destino = [nome for nome in nomes_contas if nome != st.session_state.get("transfer_origem", nomes_contas[0])]
                     conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="transfer_destino")
                 valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
-                if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+                submitted_transfer = st.form_submit_button("Confirmar Transferência", use_container_width=True)
+                if submitted_transfer:
                     id_origem = next((c.id_conta for c in todas_as_contas if c.nome == conta_origem_nome), None)
                     id_destino = next((c.id_conta for c in todas_as_contas if c.nome == conta_destino_nome), None)
                     if id_origem and id_destino and valor_transferencia > 0:
@@ -69,22 +97,36 @@ with tab_dashboard:
                             st.session_state.gerenciador.salvar_dados(); st.success("Transferência realizada!"); st.rerun()
                         else: st.error("Falha na transferência. Saldo insuficiente?")
                     else: st.error("Erro nos dados da transferência.")
-        else: st.info("Adicione pelo menos duas contas para realizar transferências.")
+        else:
+            st.info("Adicione pelo menos duas contas para realizar transferências.")
 
+# --- ABA 2: HISTÓRICO DE TRANSAÇÕES ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
-    if not transacoes: st.info("Nenhuma transação registrada ainda.")
+    if not transacoes:
+        st.info("Nenhuma transação registrada ainda.")
     else:
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
-        dados_df = [{"Data": t.data.strftime("%d/%m/%Y"), "Conta": mapa_contas.get(t.id_conta, "Conta Removida"), "Descrição": t.descricao, "Tipo": t.tipo, "Valor (R$)": f"+{t.valor:,.2f}" if t.tipo == "Receita" else f"-{t.valor:,.2f}"} for t in sorted(transacoes, key=lambda x: x.data, reverse=True)]
+        dados_df = []
+        for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
+            valor_formatado = locale.currency(t.valor, grouping=True)
+            dados_df.append({
+                "Data": t.data.strftime("%d/%m/%Y"),
+                "Conta": mapa_contas.get(t.id_conta, "Conta Removida"),
+                "Descrição": t.descricao,
+                "Tipo": t.tipo,
+                "Valor": f"+{valor_formatado}" if t.tipo == "Receita" else f"-{valor_formatado}"
+            })
         df = pd.DataFrame(dados_df)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
+# --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
     with col_contas2:
+        # ... (código de adicionar conta sem mudanças na lógica)
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta")
             tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
@@ -95,7 +137,8 @@ with tab_contas:
             st.write("**Detalhes Específicos (preencha apenas o relevante):**")
             limite = st.number_input("Limite do Cheque Especial (para Contas Correntes)", min_value=0.0, format="%.2f")
             tipo_invest = st.text_input("Tipo de Investimento (para Contas de Investimento)")
-            if st.form_submit_button("Adicionar Conta", use_container_width=True):
+            submitted_add = st.form_submit_button("Adicionar Conta", use_container_width=True)
+            if submitted_add:
                 if not nome_conta: st.error("O nome da conta é obrigatório.")
                 else:
                     nova_conta = None
@@ -105,48 +148,36 @@ with tab_contas:
                         else: nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest, logo_url=logo_url_add)
                     if nova_conta:
                         st.session_state.gerenciador.adicionar_conta(nova_conta); st.session_state.gerenciador.salvar_dados(); st.success(f"Conta '{nome_conta}' adicionada!"); st.rerun()
+    
     with col_contas1:
         st.subheader("Contas Existentes")
         todas_as_contas = st.session_state.gerenciador.contas
         if not todas_as_contas: st.info("Nenhuma conta cadastrada.")
-        else:
-            # RESTAURANDO A LÓGICA DE ABAS E LOGOS CORRETAMENTE
-            tab_cc_ger, tab_ci_ger = st.tabs(["Contas Correntes", "Contas de Investimento"])
-            with tab_cc_ger:
-                contas_correntes = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
-                if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
-                for conta in contas_correntes:
-                    logo_col, expander_col = st.columns([1, 5])
-                    with logo_col:
-                        if conta.logo_url: st.image(conta.logo_url, width=65)
-                        else: st.write("🏦")
-                    with expander_col:
-                        with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                            st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
-                            with st.form(f"edit_form_{conta.id_conta}"):
-                                novo_nome = st.text_input("Nome", value=conta.nome); nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
-                                novo_limite = st.number_input("Limite", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
-                                if st.form_submit_button("Salvar Alterações"):
-                                    nome_mudou = conta.editar_nome(novo_nome); logo_mudou = conta.editar_logo_url(nova_logo_url); attr_mudou = conta.editar_limite(novo_limite)
-                                    if nome_mudou or logo_mudou or attr_mudou: st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{novo_nome}' atualizada!"); st.rerun()
-                            if st.button(f"Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
-                                if st.session_state.gerenciador.remover_conta(conta.id_conta): st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
-            with tab_ci_ger:
-                contas_investimento = [c for c in todas_as_contas if isinstance(c, ContaInvestimento)]
-                if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
-                for conta in contas_investimento:
-                    logo_col, expander_col = st.columns([1, 5])
-                    with logo_col:
-                        if conta.logo_url: st.image(conta.logo_url, width=65)
-                        else: st.write("🏦")
-                    with expander_col:
-                        with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                            st.write(f"**Tipo:** {conta.tipo_investimento}")
-                            with st.form(f"edit_form_{conta.id_conta}"):
-                                novo_nome = st.text_input("Nome", value=conta.nome); nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
-                                novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
-                                if st.form_submit_button("Salvar Alterações"):
-                                    nome_mudou = conta.editar_nome(novo_nome); logo_mudou = conta.editar_logo_url(nova_logo_url); attr_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
-                                    if nome_mudou or logo_mudou or attr_mudou: st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{novo_nome}' atualizada!"); st.rerun()
-                            if st.button(f"Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
-                                if st.session_state.gerenciador.remover_conta(conta.id_conta): st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
+        for conta in todas_as_contas:
+            logo_col, expander_col = st.columns([1, 5])
+            with logo_col:
+                if conta.logo_url: st.image(conta.logo_url, width=65)
+                else: st.write("🏦") 
+            with expander_col:
+                # MUDANÇA 3 (Continuação): Usamos locale.currency na exibição dos saldos
+                saldo_conta_formatado = locale.currency(conta.saldo, grouping=True)
+                with st.expander(f"{conta.nome} - {saldo_conta_formatado}"):
+                    # ... (código interno do expander sem mudanças na lógica)
+                    st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
+                    if isinstance(conta, ContaCorrente): st.write(f"**Limite:** {locale.currency(conta.limite_cheque_especial, grouping=True)}")
+                    elif isinstance(conta, ContaInvestimento): st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
+                    st.divider()
+                    with st.form(f"edit_form_{conta.id_conta}"):
+                        novo_nome = st.text_input("Nome", value=conta.nome); nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
+                        if isinstance(conta, ContaCorrente): novo_limite = st.number_input("Limite", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
+                        elif isinstance(conta, ContaInvestimento): novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
+                        if st.form_submit_button("Salvar Alterações"):
+                            nome_mudou = conta.editar_nome(novo_nome); logo_mudou = conta.editar_logo_url(nova_logo_url); attr_mudou = False
+                            if isinstance(conta, ContaCorrente): attr_mudou = conta.editar_limite(novo_limite)
+                            elif isinstance(conta, ContaInvestimento): attr_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
+                            if nome_mudou or logo_mudou or attr_mudou:
+                                st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{novo_nome}' atualizada!"); st.rerun()
+                    if st.button(f"Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
+                        if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                            st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
+            st.write("")
