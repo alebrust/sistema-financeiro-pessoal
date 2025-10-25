@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 13 - ATUALIZAÇÃO IMEDIATA E CAMPOS DINÂMICOS) ---
+# --- ARQUIVO: app.py (VERSÃO 14 - CORREÇÃO DO TYPEERROR NO EXPANDER) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -25,8 +25,8 @@ with col1:
         st.warning("Nenhuma conta encontrada. Adicione uma nova conta no painel ao lado.")
     
     for conta in contas:
-        # Usamos o ID da conta na chave do expander para garantir que seja único
-        with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}", key=f"expander_{conta.id_conta}"):
+        # CORREÇÃO: O argumento 'key' foi removido daqui.
+        with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
             st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
             st.write(f"**ID:** `{conta.id_conta}`")
             
@@ -68,27 +68,21 @@ with col1:
 with col2:
     st.header("Ações")
     
-    # MUDANÇA: Tiramos o formulário daqui para que a página possa recarregar
-    # quando o selectbox for alterado.
     st.subheader("Adicionar Nova Conta")
     
-    # Damos uma chave ao selectbox para podermos ler seu estado a qualquer momento
     tipo_conta = st.selectbox(
         "Tipo de Conta", 
         ["Conta Corrente", "Conta Investimento"], 
         key="tipo_conta_selecionada"
     )
     
-    # Usamos um formulário apenas para agrupar os inputs e o botão
     with st.form("add_account_form", clear_on_submit=True):
         nome_conta = st.text_input("Nome da Conta")
         saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
         
-        # Lógica condicional para exibir o campo
-        # Agora ele verifica o estado do selectbox a cada redesenho da tela
         if st.session_state.tipo_conta_selecionada == "Conta Corrente":
             limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
-        else: # st.session_state.tipo_conta_selecionada == "Conta Investimento"
+        else:
             tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
 
         submitted_add = st.form_submit_button("Adicionar Conta")
@@ -98,7 +92,6 @@ with col2:
                 st.error("O nome da conta é obrigatório.")
             else:
                 nova_conta = None
-                # Usamos st.session_state.tipo_conta_selecionada para garantir que pegamos o valor correto
                 if st.session_state.tipo_conta_selecionada == "Conta Corrente":
                     nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite)
                 else:
@@ -111,7 +104,6 @@ with col2:
                     st.session_state.gerenciador.adicionar_conta(nova_conta)
                     st.session_state.gerenciador.salvar_dados()
                     st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
-                    # SOLUÇÃO PARA O PROBLEMA 1: Adicionamos o st.rerun() AQUI!
                     st.rerun()
 
     st.header("Resumo Financeiro")
