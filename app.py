@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 9) ---
+# --- ARQUIVO: app.py (VERSÃO 10 - COM LIMPEZA DE FORMULÁRIO) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -7,17 +7,30 @@ from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimen
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 # --- Inicialização do Sistema ---
-CAMINHO_ARQUIVO = "dados_contas.json"
-# Usamos o st.session_state para manter o gerenciador persistente entre as interações
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas(CAMINHO_ARQUIVO)
+    st.session_state.gerenciador = GerenciadorContas("dados_contas.json")
 gerenciador = st.session_state.gerenciador
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
+# --- NOVA FUNÇÃO DE CALLBACK PARA LIMPEZA ---
+def limpar_formulario_adicionar():
+    """Limpa os campos do formulário de adição no session_state."""
+    # O Streamlit armazena o valor de cada widget com uma "key".
+    # Para limpar, basta deletar essas chaves do session_state.
+    # Usamos um loop e 'pop' com um valor padrão para evitar erros se a chave não existir.
+    chaves_para_limpar = [
+        "add_nome_conta", 
+        "add_saldo_inicial", 
+        "add_limite", 
+        "add_tipo_invest"
+    ]
+    for key in chaves_para_limpar:
+        st.session_state.pop(key, None)
+
 # --- Colunas Principais ---
-col1, col2 = st.columns([1, 1]) # Divide a tela em duas colunas de tamanho igual
+col1, col2 = st.columns([1, 1])
 
 # --- COLUNA DA ESQUERDA: Contas e Transferências ---
 with col1:
@@ -32,34 +45,28 @@ with col1:
             st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
             st.write(f"**ID:** `{conta.id_conta}`")
             
-            # Formulário de Edição
             with st.form(f"edit_form_{conta.id_conta}"):
-                novo_nome = st.text_input("Novo nome da conta", value=conta.nome)
-                submitted_edit = st.form_submit_button("Salvar Alterações")
-                if submitted_edit:
+                novo_nome = st.text_input("Novo nome da conta", value=conta.nome, key=f"edit_name_{conta.id_conta}")
+                if st.form_submit_button("Salvar Alterações"):
                     if conta.editar_nome(novo_nome):
                         gerenciador.salvar_dados()
                         st.toast(f"Conta '{novo_nome}' atualizada!")
                         st.rerun()
-                    else:
-                        st.error("Nome inválido.")
             
-            # Botão de Remoção
             if st.button(f"Remover Conta '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
                 if gerenciador.remover_conta(conta.id_conta):
                     gerenciador.salvar_dados()
                     st.toast(f"Conta '{conta.nome}' removida!")
                     st.rerun()
 
-    # Funcionalidade de Transferência
     st.header("Realizar Transferência")
+    # ... (código de transferência sem mudanças) ...
     if len(contas) >= 2:
         nomes_contas = [c.nome for c in contas]
         conta_origem_nome = st.selectbox("De:", nomes_contas, key="origem")
         opcoes_destino = [nome for nome in nomes_contas if nome != conta_origem_nome]
         conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="destino")
         valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-
         if st.button("Confirmar Transferência", use_container_width=True):
             id_origem = next((c.id_conta for c in contas if c.nome == conta_origem_nome), None)
             id_destino = next((c.id_conta for c in contas if c.nome == conta_destino_nome), None)
@@ -76,38 +83,46 @@ with col1:
 # --- COLUNA DA DIREITA: Ações e Resumo ---
 with col2:
     st.header("Ações")
-    with st.form("add_account_form"):
+    with st.form("add_account_form", clear_on_submit=False): # clear_on_submit=False para controle manual
         st.subheader("Adicionar Nova Conta")
         tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
-        nome_conta = st.text_input("Nome da Conta")
-        saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
+        # Adicionamos 'key' a cada widget para poder limpá-los
+        nome_conta = st.text_input("Nome da Conta", key="add_nome_conta")
+        saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f", key="add_saldo_inicial")
         
-        # Campos condicionais
         if tipo_conta == "Conta Corrente":
-            limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
-        else: # Conta Investimento
-            tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
+            limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f", key="add_limite")
+        else:
+            tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)", key="add_tipo_invest")
 
-        submitted_add = st.form_submit_button("Adicionar Conta")
+        # MUDANÇA IMPORTANTE: Adicionamos o 'on_click'
+        submitted_add = st.form_submit_button(
+            "Adicionar Conta",
+            on_click=limpar_formulario_adicionar # Chama a função de limpeza quando clicado
+        )
+
         if submitted_add:
+            # A lógica de adicionar a conta permanece a mesma
             if not nome_conta:
                 st.error("O nome da conta é obrigatório.")
             else:
+                nova_conta = None
                 if tipo_conta == "Conta Corrente":
                     nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite)
-                else: # Conta Investimento
+                else:
                     if not tipo_invest:
                         st.error("O tipo de investimento é obrigatório.")
                     else:
                         nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest)
                 
-                if 'nova_conta' in locals():
+                if nova_conta:
                     gerenciador.adicionar_conta(nova_conta)
                     gerenciador.salvar_dados()
                     st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
                     st.rerun()
 
     st.header("Resumo Financeiro")
+    # ... (código do resumo sem mudanças) ...
     if contas:
         patrimonio_total = sum(c.saldo for c in contas)
         st.metric(label="**Patrimônio Total**", value=f"R$ {patrimonio_total:,.2f}")
