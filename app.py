@@ -1,16 +1,7 @@
-# --- ARQUIVO: app.py (VERSÃO 20 - LIMPEZA DE TRANSFERÊNCIA COM CALLBACK) ---
+# --- ARQUIVO: app.py (VERSÃO 21 - A SOLUÇÃO FINAL COM FORMULÁRIO) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
-
-# --- Funções de Callback para Limpeza ---
-def limpar_campos_transferencia():
-    """Reseta os valores dos widgets de transferência no session_state."""
-    # Verificamos se as chaves existem antes de tentar modificá-las
-    if 'transfer_valor' in st.session_state:
-        st.session_state.transfer_valor = 0.01
-    # Para os selectbox, o comportamento padrão ao recarregar é suficiente,
-    # mas limpar o valor do input numérico é o mais importante.
 
 # --- Configuração da Página ---
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
@@ -75,30 +66,34 @@ with col1:
 
     st.header("Realizar Transferência")
     if len(todas_as_contas) >= 2:
-        nomes_contas = [c.nome for c in todas_as_contas]
-        conta_origem_nome = st.selectbox("De:", nomes_contas, key="transfer_origem")
-        opcoes_destino = [nome for nome in nomes_contas if nome != conta_origem_nome]
-        conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="transfer_destino")
-        valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
-        
-        # MUDANÇA: Adicionamos o on_click ao botão
-        if st.button(
-            "Confirmar Transferência", 
-            use_container_width=True,
-            on_click=limpar_campos_transferencia # A função de limpeza é chamada no clique
-        ):
-            id_origem = next((c.id_conta for c in todas_as_contas if c.nome == conta_origem_nome), None)
-            id_destino = next((c.id_conta for c in todas_as_contas if c.nome == conta_destino_nome), None)
+        # MUDANÇA: Envolvemos toda a lógica de transferência em um formulário
+        with st.form("transfer_form", clear_on_submit=True):
+            nomes_contas = [c.nome for c in todas_as_contas]
             
-            if id_origem and id_destino:
-                # Usamos o valor do session_state para garantir que pegamos o valor antes da limpeza
-                valor = st.session_state.transfer_valor 
-                if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor):
-                    st.session_state.gerenciador.salvar_dados()
-                    st.success("Transferência realizada com sucesso!")
-                    st.rerun()
+            col_form1, col_form2 = st.columns(2)
+            with col_form1:
+                conta_origem_nome = st.selectbox("De:", nomes_contas, key="transfer_origem")
+            with col_form2:
+                opcoes_destino = [nome for nome in nomes_contas if nome != st.session_state.get("transfer_origem", nomes_contas[0])]
+                conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="transfer_destino")
+            
+            valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+            
+            submitted_transfer = st.form_submit_button("Confirmar Transferência", use_container_width=True)
+
+            if submitted_transfer:
+                id_origem = next((c.id_conta for c in todas_as_contas if c.nome == conta_origem_nome), None)
+                id_destino = next((c.id_conta for c in todas_as_contas if c.nome == conta_destino_nome), None)
+                
+                if id_origem and id_destino and valor_transferencia > 0:
+                    if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
+                        st.session_state.gerenciador.salvar_dados()
+                        st.success("Transferência realizada com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error("Falha na transferência. Saldo insuficiente?")
                 else:
-                    st.error("Falha na transferência. Saldo insuficiente?")
+                    st.error("Erro nos dados da transferência.")
     else:
         st.info("Adicione pelo menos duas contas para realizar transferências.")
 
