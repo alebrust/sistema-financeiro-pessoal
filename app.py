@@ -78,7 +78,7 @@ if len(contas) >= 2:
                 st.success(f"Transferência de R${valor_transferencia:,.2f} realizada com sucesso!")
                 gerenciador.salvar_dados()
                 # Força a página a recarregar para mostrar os novos saldos
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Transferência falhou! Verifique se há saldo suficiente.")
         else:
