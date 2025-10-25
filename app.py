@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 26 - CORREÇÃO FINAL DO FORMULÁRIO DE ADIÇÃO) ---
+# --- ARQUIVO: app.py (VERSÃO 27 - EXIBIÇÃO CORRETA DO LOGO) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -9,7 +9,7 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 
 # --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas("dados_v2.json") # Usando o novo nome de arquivo
+    st.session_state.gerenciador = GerenciadorContas("dados_v2.json")
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
@@ -19,16 +19,29 @@ col1, col2 = st.columns([1, 1])
 
 # --- COLUNA DA ESQUERDA: Contas e Transferências ---
 with col1:
-    # ... (código da coluna da esquerda não precisa de mudanças)
     st.header("Painel de Contas")
+    
     todas_as_contas = st.session_state.gerenciador.contas
     contas_correntes = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
     contas_investimento = [c for c in todas_as_contas if isinstance(c, ContaInvestimento)]
+
     if not todas_as_contas:
         st.warning("Nenhuma conta encontrada. Adicione uma nova conta no painel ao lado.")
     else:
         tab_cc, tab_ci = st.tabs(["Contas Correntes", "Contas de Investimento"])
+
+        # --- NOVA FUNÇÃO AUXILIAR ---
+        def criar_titulo_com_logo(conta):
+            """Cria uma string de Markdown para o título do expander, incluindo o logo."""
+            if conta.logo_url:
+                # Usamos Markdown para exibir a imagem. A sintaxe {width=25} define o tamanho.
+                return f"![logo]({conta.logo_url})&nbsp;&nbsp;**{conta.nome}** - R$ {conta.saldo:,.2f}"
+            else:
+                # Se não houver logo, retorna apenas o texto em negrito.
+                return f"**{conta.nome}** - R$ {conta.saldo:,.2f}"
+
         def render_editor_conta(conta):
+            # ... (código do editor sem mudanças)
             col_logo, col_titulo = st.columns([1, 5])
             if conta.logo_url:
                 with col_logo: st.image(conta.logo_url, width=50)
@@ -59,14 +72,24 @@ with col1:
                     st.session_state.gerenciador.salvar_dados()
                     st.toast(f"Conta '{conta.nome}' removida!")
                     st.rerun()
+
         with tab_cc:
             if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
             for conta in contas_correntes:
-                with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"): render_editor_conta(conta)
+                # MUDANÇA: Usamos a nova função para criar o título
+                titulo = criar_titulo_com_logo(conta)
+                with st.expander(titulo):
+                    render_editor_conta(conta)
+
         with tab_ci:
             if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
             for conta in contas_investimento:
-                with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"): render_editor_conta(conta)
+                # MUDANÇA: Usamos a nova função para criar o título
+                titulo = criar_titulo_com_logo(conta)
+                with st.expander(titulo):
+                    render_editor_conta(conta)
+    
+    # ... (Resto do código não precisa de mudanças)
     st.header("Realizar Transferência")
     if len(todas_as_contas) >= 2:
         with st.form("transfer_form", clear_on_submit=True):
@@ -94,26 +117,19 @@ with col1:
     else:
         st.info("Adicione pelo menos duas contas para realizar transferências.")
 
-# --- COLUNA DA DIREITA: Ações e Resumo ---
 with col2:
     st.header("Ações")
     st.subheader("Adicionar Nova Conta")
-    
-    # --- MUDANÇA FINAL: REINTRODUZINDO O FORMULÁRIO CORRETAMENTE ---
     with st.form("add_account_form", clear_on_submit=True):
         tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
         nome_conta = st.text_input("Nome da Conta")
         logo_url_add = st.text_input("URL do Logo (Opcional)")
         saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
-        
-        # Os campos condicionais funcionam bem dentro do formulário
         if tipo_conta == "Conta Corrente":
             limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
         else:
             tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
-
         submitted_add = st.form_submit_button("Adicionar Conta", use_container_width=True)
-
         if submitted_add:
             if not nome_conta:
                 st.error("O nome da conta é obrigatório.")
@@ -121,18 +137,16 @@ with col2:
                 nova_conta = None
                 if tipo_conta == "Conta Corrente":
                     nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
-                else: # Conta de Investimento
+                else:
                     if not tipo_invest:
                         st.error("O tipo de investimento é obrigatório.")
                     else:
                         nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest, logo_url=logo_url_add)
-                
                 if nova_conta:
                     st.session_state.gerenciador.adicionar_conta(nova_conta)
                     st.session_state.gerenciador.salvar_dados()
                     st.success(f"Conta '{nome_conta}' adicionada com sucesso!")
-                    st.rerun() # O rerun aqui é seguro e necessário para atualizar a lista de contas
-
+                    st.rerun()
     st.header("Resumo Financeiro")
     if todas_as_contas:
         saldos_agrupados = defaultdict(float)
