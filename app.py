@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 14 - CORREÇÃO DO TYPEERROR NO EXPANDER) ---
+# --- ARQUIVO: app.py (VERSÃO 15 - CORREÇÃO FINAL DO ESTADO DO FORMULÁRIO) ---
 
 import streamlit as st
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento
@@ -9,6 +9,9 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 # --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_contas.json")
+# Inicializa a chave para o tipo de conta se ela não existir
+if 'tipo_conta_selecionada' not in st.session_state:
+    st.session_state.tipo_conta_selecionada = "Conta Corrente"
 
 # --- Título da Aplicação ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
@@ -25,7 +28,6 @@ with col1:
         st.warning("Nenhuma conta encontrada. Adicione uma nova conta no painel ao lado.")
     
     for conta in contas:
-        # CORREÇÃO: O argumento 'key' foi removido daqui.
         with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
             st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
             st.write(f"**ID:** `{conta.id_conta}`")
@@ -67,19 +69,22 @@ with col1:
 # --- COLUNA DA DIREITA: Ações e Resumo ---
 with col2:
     st.header("Ações")
-    
     st.subheader("Adicionar Nova Conta")
     
-    tipo_conta = st.selectbox(
+    # MUDANÇA CRÍTICA: O selectbox agora é controlado pelo session_state
+    # O valor dele é escrito diretamente na chave 'tipo_conta_selecionada'
+    st.selectbox(
         "Tipo de Conta", 
         ["Conta Corrente", "Conta Investimento"], 
-        key="tipo_conta_selecionada"
+        key="tipo_conta_selecionada",
+        # on_change=None # Não precisamos mais de on_change, o fluxo normal cuidará disso
     )
     
     with st.form("add_account_form", clear_on_submit=True):
         nome_conta = st.text_input("Nome da Conta")
         saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
         
+        # A lógica condicional continua a mesma, lendo do session_state
         if st.session_state.tipo_conta_selecionada == "Conta Corrente":
             limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
         else:
@@ -94,7 +99,7 @@ with col2:
                 nova_conta = None
                 if st.session_state.tipo_conta_selecionada == "Conta Corrente":
                     nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite)
-                else:
+                else: # Conta de Investimento
                     if not tipo_invest:
                         st.error("O tipo de investimento é obrigatório.")
                     else:
