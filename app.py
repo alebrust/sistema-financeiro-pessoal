@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 34 - CORREÇÃO DA EXIBIÇÃO DO LOGO NAS CONTAS) ---
+# --- ARQUIVO: app.py (VERSÃO 35 - CORREÇÃO FINAL DA REGRESSÃO DO FORMULÁRIO) ---
 
 import streamlit as st
 import pandas as pd
@@ -22,7 +22,6 @@ tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 His
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
     col1, col2 = st.columns([1, 1])
-    
     with col2:
         st.header("Ações Rápidas")
         with st.expander("💸 Registrar Nova Transação", expanded=True):
@@ -46,7 +45,6 @@ with tab_dashboard:
                                 st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
                             else:
                                 st.error("Falha ao registrar. Saldo insuficiente?")
-        
         st.header("Resumo Financeiro")
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
@@ -60,7 +58,6 @@ with tab_dashboard:
             patrimonio_total = sum(saldos_agrupados.values()); st.metric(label="**Patrimônio Total**", value=f"R$ {patrimonio_total:,.2f}")
         else:
             st.metric(label="**Patrimônio Total**", value="R$ 0,00")
-
     with col1:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
@@ -109,27 +106,34 @@ with tab_transacoes:
 with tab_contas:
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
-    
     with col_contas2:
+        # --- MUDANÇA FINAL E CORRETA AQUI ---
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta")
             tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
             nome_conta = st.text_input("Nome da Conta")
             logo_url_add = st.text_input("URL do Logo (Opcional)")
             saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
-            if tipo_conta == "Conta Corrente":
-                limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
-            else:
-                tipo_invest = st.text_input("Tipo de Investimento (Ex: Ações, Cripto)")
+            
+            st.markdown("---") # Divisor para clareza
+            st.write("**Detalhes Específicos (preencha apenas o relevante):**")
+            
+            # Ambos os campos são sempre visíveis
+            limite = st.number_input("Limite do Cheque Especial (para Contas Correntes)", min_value=0.0, format="%.2f")
+            tipo_invest = st.text_input("Tipo de Investimento (para Contas de Investimento)")
+
             submitted_add = st.form_submit_button("Adicionar Conta", use_container_width=True)
             if submitted_add:
                 if not nome_conta: st.error("O nome da conta é obrigatório.")
                 else:
                     nova_conta = None
-                    if tipo_conta == "Conta Corrente": nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
-                    else:
-                        if not tipo_invest: st.error("O tipo de investimento é obrigatório.")
-                        else: nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest, logo_url=logo_url_add)
+                    if tipo_conta == "Conta Corrente":
+                        nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
+                    else: # tipo_conta == "Conta Investimento"
+                        if not tipo_invest:
+                            st.error("O tipo de investimento é obrigatório para Contas de Investimento.")
+                        else:
+                            nova_conta = ContaInvestimento(nome=nome_conta, saldo=saldo_inicial, tipo_investimento=tipo_invest, logo_url=logo_url_add)
                     if nova_conta:
                         st.session_state.gerenciador.adicionar_conta(nova_conta); st.session_state.gerenciador.salvar_dados(); st.success(f"Conta '{nome_conta}' adicionada!"); st.rerun()
     
@@ -137,22 +141,13 @@ with tab_contas:
         st.subheader("Contas Existentes")
         todas_as_contas = st.session_state.gerenciador.contas
         if not todas_as_contas: st.info("Nenhuma conta cadastrada.")
-        
-        # --- MUDANÇA PRINCIPAL AQUI ---
         for conta in todas_as_contas:
-            # 1. Criamos as colunas para cada item da lista
             logo_col, expander_col = st.columns([1, 6])
-            
             with logo_col:
-                if conta.logo_url:
-                    st.image(conta.logo_url, width=50)
-                else:
-                    st.write("🏦") # Ícone padrão
-
+                if conta.logo_url: st.image(conta.logo_url, width=50)
+                else: st.write("🏦") 
             with expander_col:
-                # 2. O expander agora fica na segunda coluna
                 with st.expander(f"{conta.nome} - R$ {conta.saldo:,.2f}"):
-                    # O conteúdo do expander (formulário de edição, etc.) permanece o mesmo
                     st.write(f"**Tipo:** {conta.__class__.__name__.replace('Conta', '')}")
                     if isinstance(conta, ContaCorrente): st.write(f"**Limite:** R$ {conta.limite_cheque_especial:,.2f}")
                     elif isinstance(conta, ContaInvestimento): st.write(f"**Tipo de Investimento:** {conta.tipo_investimento}")
@@ -170,4 +165,4 @@ with tab_contas:
                     if st.button(f"Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
                         if st.session_state.gerenciador.remover_conta(conta.id_conta):
                             st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
-            st.write("") # Adiciona um espaço vertical
+            st.write("")
