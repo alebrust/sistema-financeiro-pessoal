@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 45 - CONFIRMAÇÃO DE EXCLUSÃO) ---
+# --- ARQUIVO: app.py (VERSÃO 46 - INTEGRANDO REVERSÃO DE COMPRA) ---
 
 import streamlit as st
 import pandas as pd
@@ -12,9 +12,9 @@ def formatar_moeda(valor):
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas("dados_v7.json")
+    # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
+    st.session_state.gerenciador = GerenciadorContas("dados_v8.json")
 
-# Inicializa a chave para o controle do diálogo de confirmação
 if 'transacao_para_excluir' not in st.session_state:
     st.session_state.transacao_para_excluir = None
 
@@ -24,7 +24,6 @@ tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 His
 
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
-    # ... (código do Dashboard sem mudanças)
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
@@ -100,13 +99,11 @@ with tab_transacoes:
         st.info("Nenhuma transação registrada ainda.")
     else:
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
-        
-        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 2, 3, 2, 2, 1])
+        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
         col_data.write("**Data**"); col_conta.write("**Conta**"); col_desc.write("**Descrição**"); col_cat.write("**Categoria**"); col_valor.write("**Valor**"); col_acao.write("**Ação**")
         st.divider()
-
         for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 3, 2, 2, 1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 4, 2, 2, 1])
             with col1: st.text(t.data.strftime("%d/%m/%Y"))
             with col2: st.text(mapa_contas.get(t.id_conta, "N/A"))
             with col3: st.text(t.descricao)
@@ -114,34 +111,24 @@ with tab_transacoes:
             with col5:
                 valor_str = f"+{formatar_moeda(t.valor)}" if t.tipo == "Receita" else f"-{formatar_moeda(t.valor)}"
                 cor = "green" if t.tipo == "Receita" else "red"
-                st.markdown(f"<span style='color:{cor};'>{valor_str}</span>", unsafe_allow_html=True)
-            
-            # --- MUDANÇA PRINCIPAL AQUI ---
+                st.markdown(f"<p style='color:{cor};'>{valor_str}</p>", unsafe_allow_html=True)
             with col6:
-                # 1. O botão de lixeira agora apenas define o estado de confirmação
                 if st.button("🗑️", key=f"del_{t.id_transacao}", help="Excluir esta transação"):
                     st.session_state.transacao_para_excluir = t.id_transacao
                     st.rerun()
-
-            # 2. Se uma transação está pendente de exclusão, mostramos o diálogo de confirmação
             if st.session_state.transacao_para_excluir == t.id_transacao:
                 st.warning(f"Tem certeza que deseja excluir a transação '{t.descricao}'?")
                 col_confirm, col_cancel = st.columns(2)
                 with col_confirm:
                     if st.button("Sim, excluir", key=f"confirm_del_{t.id_transacao}", type="primary"):
+                        # NENHUMA MUDANÇA AQUI: A chamada é a mesma, a inteligência está no backend.
                         sucesso = st.session_state.gerenciador.remover_transacao(t.id_transacao)
                         if sucesso:
-                            st.session_state.gerenciador.salvar_dados()
-                            st.toast("Transação removida com sucesso!")
-                            st.session_state.transacao_para_excluir = None # Limpa o estado
-                            st.rerun()
-                        else:
-                            st.error("Não foi possível remover a transação.")
+                            st.session_state.gerenciador.salvar_dados(); st.toast("Transação removida com sucesso!"); st.session_state.transacao_para_excluir = None; st.rerun()
+                        else: st.error("Não foi possível remover a transação.")
                 with col_cancel:
                     if st.button("Cancelar", key=f"cancel_del_{t.id_transacao}"):
-                        st.session_state.transacao_para_excluir = None # Limpa o estado
-                        st.rerun()
-            
+                        st.session_state.transacao_para_excluir = None; st.rerun()
             st.divider()
 
 # --- ABA 3: GESTÃO DE CONTAS ---
