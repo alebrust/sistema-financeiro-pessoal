@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 43 - INTERFACE DE CAIXA E EXCLUSÃO) ---
+# --- ARQUIVO: app.py (VERSÃO 44 - CORREÇÃO DA EXCLUSÃO DE TRANSAÇÃO) ---
 
 import streamlit as st
 import pandas as pd
@@ -12,7 +12,6 @@ def formatar_moeda(valor):
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 if 'gerenciador' not in st.session_state:
-    # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
     st.session_state.gerenciador = GerenciadorContas("dados_v7.json")
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
@@ -21,14 +20,14 @@ tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 His
 
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
+    # ... (código do Dashboard sem mudanças)
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
-
         with st.expander("📈 Comprar Ativo"):
             contas_investimento = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
             if not contas_investimento:
-                st.warning("Crie uma Conta de Investimento (corretora) na aba 'Contas' para comprar ativos.")
+                st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
             else:
                 with st.form("buy_asset_form", clear_on_submit=True):
                     st.write("**Registrar Compra de Ativo**")
@@ -39,22 +38,14 @@ with tab_dashboard:
                     with col_qnt: quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
                     with col_preco: preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.01, format="%.2f")
                     data_compra = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
-                    
                     if st.form_submit_button("Confirmar Compra"):
-                        if not all([ticker, quantidade > 0, preco_unitario > 0]):
-                            st.error("Preencha todos os detalhes da compra do ativo.")
+                        if not all([ticker, quantidade > 0, preco_unitario > 0]): st.error("Preencha todos os detalhes da compra do ativo.")
                         else:
                             id_destino = next((c.id_conta for c in contas_investimento if c.nome == conta_destino_nome), None)
-                            sucesso = st.session_state.gerenciador.comprar_ativo(
-                                id_conta_destino=id_destino, ticker=ticker, quantidade=quantidade,
-                                preco_unitario=preco_unitario, tipo_ativo=tipo_ativo, data_compra=data_compra
-                            )
-                            if sucesso:
-                                st.session_state.gerenciador.salvar_dados(); st.success(f"Compra de {ticker} registrada!"); st.rerun()
-                            else:
-                                st.error("Falha na compra. Verifique o saldo em caixa da corretora.")
-
-        with st.expander("💸 Registrar Receita/Despesa"):
+                            sucesso = st.session_state.gerenciador.comprar_ativo(id_conta_destino=id_destino, ticker=ticker, quantidade=quantidade, preco_unitario=preco_unitario, tipo_ativo=tipo_ativo, data_compra=data_compra)
+                            if sucesso: st.session_state.gerenciador.salvar_dados(); st.success(f"Compra de {ticker} registrada!"); st.rerun()
+                            else: st.error("Falha na compra. Verifique o saldo em caixa da corretora.")
+        with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)]
             if not contas_correntes: st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
             else:
@@ -72,9 +63,7 @@ with tab_dashboard:
                             sucesso = st.session_state.gerenciador.registrar_transacao(id_conta=conta_id, descricao=descricao, valor=valor, tipo=tipo_transacao, data_transacao=data_transacao, categoria=categoria)
                             if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
                             else: st.error("Falha ao registrar. Saldo insuficiente?")
-        
         st.header("Resumo Financeiro")
-        # ... (código do resumo sem mudanças)
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
             saldos_agrupados = defaultdict(float)
@@ -89,10 +78,8 @@ with tab_dashboard:
             patrimonio_total = sum(c.saldo for c in todas_as_contas)
             st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
         else: st.metric(label="**Patrimônio Total**", value="R$ 0,00")
-
     with col1:
         st.header("Realizar Transferência")
-        # ... (código de transferência sem mudanças)
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
             with st.form("transfer_form", clear_on_submit=True):
@@ -111,9 +98,9 @@ with tab_dashboard:
                             st.session_state.gerenciador.salvar_dados(); st.success("Transferência realizada!"); st.rerun()
                         else: st.error("Falha na transferência. Saldo insuficiente?")
                     else: st.error("Erro nos dados da transferência.")
-        else: st.info("Adicione pelo menos uma Conta Corrente e outra conta de destino para realizar transferências.")
+        else: st.info("Adicione pelo menos duas contas para realizar transferências.")
 
-# --- ABA 2: HISTÓRICO DE TRANSAÇÕES ---
+# --- ABA 2: HISTÓRICO DE TRANSAÇÕES (MUDANÇA PRINCIPAL) ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
@@ -122,56 +109,44 @@ with tab_transacoes:
     else:
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
         
-        # MUDANÇA: Adicionando uma coluna de 'Ações' com o botão de exclusão
-        dados_para_df = []
-        for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
-            dados_para_df.append({
-                "id": t.id_transacao, # ID oculto para usar no botão
-                "Data": t.data.strftime("%d/%m/%Y"),
-                "Conta": mapa_contas.get(t.id_conta, "N/A"),
-                "Descrição": t.descricao,
-                "Categoria": t.categoria,
-                "Valor": formatar_moeda(t.valor),
-                "Tipo": t.tipo
-            })
-        
-        df = pd.DataFrame(dados_para_df)
-        
-        # Configuração das colunas para o st.data_editor
-        column_config = {
-            "id": None, # Oculta a coluna de ID
-            "Ações": st.column_config.ActionColumn(
-                label="Ações",
-                width="small",
-            )
-        }
-        
-        # Usamos o st.data_editor para ter colunas interativas
-        edited_df = st.data_editor(
-            df,
-            column_config=column_config,
-            hide_index=True,
-            use_container_width=True,
-            key="data_editor_transacoes"
-        )
+        # Cabeçalho da "tabela"
+        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 2, 3, 2, 2, 1])
+        col_data.write("**Data**")
+        col_conta.write("**Conta**")
+        col_desc.write("**Descrição**")
+        col_cat.write("**Categoria**")
+        col_valor.write("**Valor**")
+        col_acao.write("**Ação**")
+        st.divider()
 
-        # Lógica para processar a exclusão
-        if "delete" in st.session_state.data_editor_transacoes:
-            linha_para_remover = st.session_state.data_editor_transacoes["delete"]
-            id_transacao_remover = df.iloc[linha_para_remover]["id"]
-            
-            if st.session_state.gerenciador.remover_transacao(id_transacao_remover):
-                st.session_state.gerenciador.salvar_dados()
-                st.toast("Transação removida com sucesso!")
-                # Limpa o estado do editor para evitar re-exclusão
-                del st.session_state.data_editor_transacoes["delete"]
-                st.rerun()
-            else:
-                st.error("Não foi possível remover a transação.")
+        for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 3, 2, 2, 1])
+            with col1:
+                st.text(t.data.strftime("%d/%m/%Y"))
+            with col2:
+                st.text(mapa_contas.get(t.id_conta, "N/A"))
+            with col3:
+                st.text(t.descricao)
+            with col4:
+                st.text(t.categoria)
+            with col5:
+                valor_str = f"+{formatar_moeda(t.valor)}" if t.tipo == "Receita" else f"-{formatar_moeda(t.valor)}"
+                cor = "green" if t.tipo == "Receita" else "red"
+                st.markdown(f"<span style='color:{cor};'>{valor_str}</span>", unsafe_allow_html=True)
+            with col6:
+                # Botão de exclusão para cada linha
+                if st.button("🗑️", key=f"del_{t.id_transacao}", help="Excluir esta transação"):
+                    if st.session_state.gerenciador.remover_transacao(t.id_transacao):
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast("Transação removida com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível remover a transação.")
+            st.divider()
 
 # --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
-    # ... (código da aba Contas com a exibição do Saldo em Caixa)
+    # ... (código da aba Contas sem mudanças)
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
     with col_contas2:
@@ -206,7 +181,6 @@ with tab_contas:
                         else: st.write("🏦")
                     with expander_col:
                         with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
-                            # ... (código de edição da conta corrente sem mudanças)
                             st.write(f"**Limite:** {formatar_moeda(conta.limite_cheque_especial)}")
                             with st.form(f"edit_form_{conta.id_conta}"):
                                 novo_nome = st.text_input("Nome", value=conta.nome); nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
@@ -226,7 +200,6 @@ with tab_contas:
                         else: st.write("📈")
                     with expander_col:
                         with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
-                            # MUDANÇA: Exibindo os novos detalhes da conta de investimento
                             st.metric("Patrimônio Consolidado", formatar_moeda(conta.saldo))
                             col_caixa, col_ativos = st.columns(2)
                             col_caixa.metric("Saldo em Caixa", formatar_moeda(conta.saldo_caixa))
