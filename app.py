@@ -12,7 +12,7 @@ def formatar_moeda(valor):
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas("dados_v5.json")
+    st.session_state.gerenciador = GerenciadorContas("dados_v6.json")
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
