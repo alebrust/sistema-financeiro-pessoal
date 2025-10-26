@@ -1,8 +1,8 @@
-# --- ARQUIVO: app.py (VERSÃO 54 - INTERFACE DE FECHAMENTO DE FATURA) ---
+# --- ARQUIVO: app.py (VERSÃO 55 - CORREÇÃO DO FORMULÁRIO DE FECHAMENTO) ---
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento, Ativo, CartaoCredito
 from collections import defaultdict
 
@@ -12,10 +12,8 @@ def formatar_moeda(valor):
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
 if 'gerenciador' not in st.session_state:
-    # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
     st.session_state.gerenciador = GerenciadorContas("dados_v12.json")
 
-# Inicializando os estados de confirmação
 if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_para_excluir = None
 if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
 if 'compra_para_excluir' not in st.session_state: st.session_state.compra_para_excluir = None
@@ -198,12 +196,12 @@ with tab_contas:
                 if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
                 for conta in contas_investimento: render_conta_com_confirmacao(conta)
 
-# --- ABA 4: CARTÕES DE CRÉDITO (MUDANÇA PRINCIPAL) ---
+# --- ABA 4: CARTÕES DE CRÉDITO ---
 with tab_cartoes:
+    # ... (código da aba Cartões com a correção)
     st.header("Gerenciar Cartões de Crédito")
     col_cartoes1, col_cartoes2 = st.columns(2)
     with col_cartoes2:
-        # ... (Formulário de adicionar cartão, sem mudanças)
         with st.form("add_card_form", clear_on_submit=True):
             st.subheader("Adicionar Novo Cartão"); nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)"); logo_url_cartao = st.text_input("URL do Logo (Opcional)"); dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=20); dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=28)
             if st.form_submit_button("Adicionar Cartão", use_container_width=True):
@@ -211,8 +209,6 @@ with tab_cartoes:
                 else:
                     novo_cartao = CartaoCredito(nome=nome_cartao, logo_url=logo_url_cartao, dia_fechamento=dia_fechamento, dia_vencimento=dia_vencimento)
                     st.session_state.gerenciador.adicionar_cartao_credito(novo_cartao); st.session_state.gerenciador.salvar_dados(); st.success(f"Cartão '{nome_cartao}' adicionado!"); st.rerun()
-        
-        # ... (Formulário de lançar compra, sem mudanças)
         st.subheader("Lançar Compra no Cartão")
         cartoes_cadastrados = st.session_state.gerenciador.cartoes_credito
         if not cartoes_cadastrados: st.warning("Adicione um cartão de crédito para poder lançar compras.")
@@ -229,7 +225,6 @@ with tab_cartoes:
                         sucesso = st.session_state.gerenciador.registrar_compra_cartao(id_cartao=id_cartao, descricao=descricao_compra, valor_total=valor_compra, data_compra=data_compra_cartao, categoria=categoria_compra, num_parcelas=num_parcelas, observacao=observacao_compra)
                         if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Compra registrada com sucesso!"); st.rerun()
                         else: st.error("Falha ao registrar a compra.")
-
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
         cartoes = st.session_state.gerenciador.cartoes_credito
@@ -241,63 +236,52 @@ with tab_cartoes:
                     if cartao.logo_url: st.image(cartao.logo_url, width=65)
                     else: st.write("💳")
                 with expander_col:
-                    # MUDANÇA: Lógica para exibir faturas
                     compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
                     valor_fatura_aberta = sum(c.valor for c in compras_abertas)
-                    
                     faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
-
                     with st.expander(f"{cartao.nome} - Fatura Aberta: {formatar_moeda(valor_fatura_aberta)}"):
-                        tab_fatura_aberta, tab_faturas_fechadas = st.tabs(["Fatura Aberta", "Histórico de Faturas"])
-
+                        tab_fatura_aberta, tab_faturas_fechadas = st.tabs(["Lançamentos Futuros", "Faturas Fechadas"])
                         with tab_fatura_aberta:
                             st.write(f"**Total de Lançamentos Futuros:** {formatar_moeda(valor_fatura_aberta)}")
-                            if not compras_abertas:
-                                st.info("Nenhum lançamento futuro para este cartão.")
+                            if not compras_abertas: st.info("Nenhum lançamento futuro para este cartão.")
                             else:
                                 for compra in sorted(compras_abertas, key=lambda x: x.data_compra):
-                                    c1, c2 = st.columns([4, 1])
-                                    desc = f"{compra.data_compra.strftime('%d/%m/%Y')} - {compra.descricao}: {formatar_moeda(compra.valor)}"
-                                    c1.text(desc)
+                                    c1, c2 = st.columns([4, 1]); desc = f"{compra.data_compra.strftime('%d/%m/%Y')} - {compra.descricao}: {formatar_moeda(compra.valor)}"; c1.text(desc)
                                     with c2:
                                         if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
-                                            st.session_state.compra_para_excluir = compra.id_compra_original
-                                            st.rerun()
-                            
+                                            st.session_state.compra_para_excluir = compra.id_compra_original; st.rerun()
+                                if st.session_state.compra_para_excluir == compra.id_compra_original:
+                                    st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?"); cc1, cc2 = st.columns(2)
+                                    if cc1.button("Sim, excluir", key=f"conf_del_compra_{compra.id_compra}", type="primary"):
+                                        st.session_state.gerenciador.remover_compra_cartao(compra.id_compra_original); st.session_state.gerenciador.salvar_dados(); st.toast("Compra removida!"); st.session_state.compra_para_excluir = None; st.rerun()
+                                    if cc2.button("Cancelar", key=f"cancel_del_compra_{compra.id_compra}"): st.session_state.compra_para_excluir = None; st.rerun()
                             st.divider()
-                            with st.form(f"close_bill_form_{cartao.id_cartao}"):
-                                st.write("**Fechar Fatura Atual**")
+                            # --- FORMULÁRIO DE FECHAMENTO CORRIGIDO ---
+                            with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
+                                st.write("**Fechar Fatura**")
                                 data_fechamento_real = st.date_input("Data Real do Fechamento", value=datetime.today(), format="DD/MM/YYYY")
                                 data_vencimento_real = st.date_input("Data Real do Vencimento", value=datetime.today() + timedelta(days=10), format="DD/MM/YYYY")
-                                if st.form_submit_button("Fechar Fatura", type="primary"):
+                                if st.form_submit_button("Confirmar Fechamento", type="primary"):
                                     nova_fatura = st.session_state.gerenciador.fechar_fatura(cartao.id_cartao, data_fechamento_real, data_vencimento_real)
                                     if nova_fatura:
-                                        st.session_state.gerenciador.salvar_dados()
-                                        st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%B/%Y')} fechada com valor de {formatar_moeda(nova_fatura.valor_total)}!")
-                                        st.rerun()
+                                        st.session_state.gerenciador.salvar_dados(); st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%B/%Y')} fechada!"); st.rerun()
                                     else:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
-
                         with tab_faturas_fechadas:
                             if not faturas_fechadas: st.info("Nenhuma fatura fechada para este cartão.")
                             for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
                                 st.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
-                                # Futuramente, aqui entrará o botão "Pagar Fatura"
 
 # --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
     # ... (código da aba Configurações sem mudanças)
-    st.header("⚙️ Configurações Gerais")
-    st.subheader("Gerenciar Categorias")
-    col_cat1, col_cat2 = st.columns(2)
+    st.header("⚙️ Configurações Gerais"); st.subheader("Gerenciar Categorias"); col_cat1, col_cat2 = st.columns(2)
     with col_cat1:
-        st.write("Categorias existentes:")
-        categorias = st.session_state.gerenciador.categorias
+        st.write("Categorias existentes:"); categorias = st.session_state.gerenciador.categorias
         if not categorias: st.info("Nenhuma categoria cadastrada.")
         else:
             for cat in categorias:
-                cat_col1, cat_col2 = st.columns([4, 1])
-                cat_col1.write(f"- {cat}")
+                cat_col1, cat_col2 = st.columns([4, 1]); cat_col1.write(f"- {cat}")
                 if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
                     st.session_state.gerenciador.remover_categoria(cat); st.session_state.gerenciador.salvar_dados(); st.rerun()
     with col_cat2:
