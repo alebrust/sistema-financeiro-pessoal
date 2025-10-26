@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 42 - OPERAÇÃO DE COMPRA) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 43 - SALDO EM CAIXA E CORREÇÕES) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -7,7 +7,7 @@ from datetime import date
 from typing import List, Optional, Dict, Any
 
 class Ativo:
-    # ... (classe Ativo sem mudanças)
+    # ... (sem mudanças)
     def __init__(self, ticker: str, quantidade: float, preco_medio: float, tipo_ativo: str):
         self.ticker, self.quantidade, self.preco_medio, self.tipo_ativo = ticker, quantidade, preco_medio, tipo_ativo
     @property
@@ -15,7 +15,7 @@ class Ativo:
     def para_dict(self) -> Dict[str, Any]: return self.__dict__
 
 class Transacao:
-    # ... (classe Transacao sem mudanças)
+    # ... (sem mudanças)
     def __init__(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str, id_transacao: str = None):
         self.id_transacao = id_transacao if id_transacao else str(uuid4())
         self.id_conta, self.descricao, self.valor, self.tipo, self.data, self.categoria = id_conta, descricao, valor, tipo, data_transacao, categoria
@@ -23,7 +23,7 @@ class Transacao:
         return {"id_transacao": self.id_transacao, "id_conta": self.id_conta, "descricao": self.descricao, "valor": self.valor, "tipo": self.tipo, "data": self.data.isoformat(), "categoria": self.categoria}
 
 class Conta(ABC):
-    # ... (classe Conta sem mudanças)
+    # ... (sem mudanças)
     def __init__(self, nome: str, saldo: float = 0.0, id_conta: str = None, logo_url: str = ""):
         self._id_conta, self._nome, self._saldo, self._logo_url = (id_conta if id_conta else str(uuid4()), nome, saldo, logo_url if logo_url else "")
     def alterar_saldo(self, valor: float): self._saldo += valor
@@ -51,7 +51,7 @@ class Conta(ABC):
     def __repr__(self) -> str: return f"<{self.__class__.__name__}(nome='{self.nome}', saldo=R${self.saldo:.2f})>"
 
 class ContaCorrente(Conta):
-    # ... (classe ContaCorrente sem mudanças)
+    # ... (sem mudanças)
     def __init__(self, nome: str, saldo: float = 0.0, limite_cheque_especial: float = 0.0, **kwargs):
         super().__init__(nome, saldo, **kwargs)
         self._limite_cheque_especial = limite_cheque_especial
@@ -70,41 +70,54 @@ class ContaCorrente(Conta):
     def para_dict(self) -> Dict[str, Any]:
         dados = super().para_dict(); dados["limite_cheque_especial"] = self.limite_cheque_especial; return dados
 
-# --- MUDANÇAS NA ContaInvestimento ---
+# --- MUDANÇA DRÁSTICA NA ContaInvestimento ---
 class ContaInvestimento(Conta):
-    def __init__(self, nome: str, **kwargs):
-        super().__init__(nome, saldo=0.0, **kwargs) 
+    def __init__(self, nome: str, saldo: float = 0.0, **kwargs):
+        # O 'saldo' da conta pai agora representa o SALDO EM CAIXA.
+        super().__init__(nome, saldo, **kwargs)
         self._ativos: List[Ativo] = []
 
     @property
-    def saldo(self) -> float:
+    def saldo_caixa(self) -> float:
+        """Retorna o dinheiro parado na corretora."""
+        return self._saldo
+
+    @property
+    def valor_em_ativos(self) -> float:
+        """Retorna o valor total apenas dos ativos investidos."""
         return sum(ativo.valor_total for ativo in self._ativos)
+
+    @property
+    def saldo(self) -> float:
+        """O saldo total da conta é o caixa + o valor dos ativos."""
+        return self.saldo_caixa + self.valor_em_ativos
+
     @property
     def ativos(self) -> List[Ativo]:
         return self._ativos
 
-    # NOVO MÉTODO: Lógica de adição e cálculo de preço médio
     def atualizar_ou_adicionar_ativo(self, ticker: str, quantidade_compra: float, preco_compra: float, tipo_ativo: str):
-        """Encontra um ativo pelo ticker, atualiza-o ou cria um novo."""
         for ativo in self._ativos:
             if ativo.ticker.upper() == ticker.upper():
-                # Lógica para recalcular o preço médio
                 custo_total_antigo = ativo.quantidade * ativo.preco_medio
                 custo_total_compra = quantidade_compra * preco_compra
                 nova_quantidade = ativo.quantidade + quantidade_compra
-                
                 ativo.preco_medio = (custo_total_antigo + custo_total_compra) / nova_quantidade
                 ativo.quantidade = nova_quantidade
-                return # Encontrou e atualizou, então termina a função
-
-        # Se o loop terminou e não encontrou o ativo, cria um novo
+                return
         novo_ativo = Ativo(ticker.upper(), quantidade_compra, preco_compra, tipo_ativo)
         self._ativos.append(novo_ativo)
 
-    def sacar(self, valor: float) -> bool: return False
+    # O método sacar agora saca do SALDO EM CAIXA.
+    def sacar(self, valor: float) -> bool:
+        if not isinstance(valor, (int, float)) or valor <= 0: return False
+        if valor > self.saldo_caixa: return False
+        self._saldo -= valor # Debita do saldo em caixa (_saldo)
+        return True
+
     def para_dict(self) -> Dict[str, Any]:
+        # Salvamos o saldo em caixa como 'saldo' e a lista de ativos.
         dados = super().para_dict()
-        dados.pop('saldo', None)
         dados["ativos"] = [ativo.para_dict() for ativo in self._ativos]
         return dados
 
@@ -121,31 +134,36 @@ class GerenciadorContas:
     @property
     def transacoes(self) -> List[Transacao]: return self._transacoes
 
-    # --- NOVO MÉTODO DE OPERAÇÃO ---
-    def comprar_ativo(self, id_conta_origem: str, id_conta_destino: str, ticker: str, quantidade: float, preco_unitario: float, tipo_ativo: str, data_compra: date) -> bool:
-        """Orquestra a operação de compra de um ativo."""
-        conta_origem = self.buscar_conta_por_id(id_conta_origem)
+    # MUDANÇA: Lógica de compra agora usa o caixa da corretora
+    def comprar_ativo(self, id_conta_destino: str, ticker: str, quantidade: float, preco_unitario: float, tipo_ativo: str, data_compra: date) -> bool:
         conta_destino = self.buscar_conta_por_id(id_conta_destino)
-
-        # Validações
-        if not isinstance(conta_origem, ContaCorrente) or not isinstance(conta_destino, ContaInvestimento):
-            print("Erro: A origem deve ser uma Conta Corrente e o destino uma Conta de Investimento.")
-            return False
+        if not isinstance(conta_destino, ContaInvestimento): return False
         
         custo_total = quantidade * preco_unitario
-        if not conta_origem.sacar(custo_total):
-            print("Erro: Saldo insuficiente na conta de origem para comprar o ativo.")
-            return False
+        # Tira o dinheiro do caixa da PRÓPRIA corretora
+        if not conta_destino.sacar(custo_total): return False
 
-        # Se o saque foi bem-sucedido, adiciona o ativo e registra a transação
         conta_destino.atualizar_ou_adicionar_ativo(ticker, quantidade, preco_unitario, tipo_ativo)
         
-        descricao_transacao = f"Compra de {quantidade}x {ticker} a {preco_unitario}"
-        self._apenas_registrar_transacao(id_conta_origem, descricao_transacao, custo_total, "Despesa", data_compra, "Investimentos")
-        
+        descricao_transacao = f"Compra de {quantidade}x {ticker}"
+        self._apenas_registrar_transacao(id_conta_destino, descricao_transacao, custo_total, "Despesa", data_compra, "Compra de Ativo")
         return True
 
-    # ... (resto do Gerenciador, com pequenas mudanças)
+    # NOVO MÉTODO: Remover transação
+    def remover_transacao(self, id_transacao: str) -> bool:
+        transacao_para_remover = next((t for t in self._transacoes if t.id_transacao == id_transacao), None)
+        if not transacao_para_remover: return False
+
+        conta_afetada = self.buscar_conta_por_id(transacao_para_remover.id_conta)
+        if conta_afetada:
+            # Reverte o efeito da transação no saldo da conta
+            valor_reversao = -transacao_para_remover.valor if transacao_para_remover.tipo == "Receita" else transacao_para_remover.valor
+            conta_afetada.alterar_saldo(valor_reversao)
+        
+        self._transacoes.remove(transacao_para_remover)
+        return True
+
+    # ... (resto do Gerenciador)
     def _apenas_registrar_transacao(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str):
         nova_transacao = Transacao(id_conta, descricao, valor, tipo, data_transacao, categoria)
         self._transacoes.append(nova_transacao)
@@ -155,7 +173,7 @@ class GerenciadorContas:
         valor_efetivo = valor if tipo == "Receita" else -valor
         if tipo == "Despesa":
             if isinstance(conta, ContaCorrente) and valor > conta.saldo_disponivel_saque: return False
-            if isinstance(conta, ContaInvestimento) and valor > conta.saldo: return False
+            if isinstance(conta, ContaInvestimento) and valor > conta.saldo_caixa: return False
         conta.alterar_saldo(valor_efetivo)
         self._apenas_registrar_transacao(id_conta, descricao, valor, tipo, data_transacao, categoria)
         return True
