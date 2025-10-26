@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 50 - INTERFACE DE COMPRA NO CARTÃO) ---
+# --- ARQUIVO: app.py (VERSÃO 51 - INTERFACE DE CATEGORIAS E OBSERVAÇÕES) ---
 
 import streamlit as st
 import pandas as pd
@@ -13,19 +13,21 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 
 if 'gerenciador' not in st.session_state:
     # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
-    st.session_state.gerenciador = GerenciadorContas("dados_v10.json")
+    st.session_state.gerenciador = GerenciadorContas("dados_v11.json")
 
 # Inicializando os estados de confirmação
 if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_para_excluir = None
 if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
+if 'compra_para_excluir' not in st.session_state: st.session_state.compra_para_excluir = None
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
-tab_dashboard, tab_transacoes, tab_contas, tab_cartoes = st.tabs(["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões de Crédito"])
+# MUDANÇA: Adicionada a aba de Configurações
+tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"])
 
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
-    # ... (código do Dashboard sem mudanças)
+    # ... (código do Dashboard com formulários atualizados)
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
@@ -50,15 +52,21 @@ with tab_dashboard:
             if not contas_correntes: st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
             else:
                 with st.form("new_transaction_form", clear_on_submit=True):
-                    tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"]); conta_selecionada_nome = st.selectbox("Conta Corrente", [c.nome for c in contas_correntes]); descricao = st.text_input("Descrição"); categoria = st.text_input("Categoria"); valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f"); data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+                    tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"]); conta_selecionada_nome = st.selectbox("Conta Corrente", [c.nome for c in contas_correntes]); descricao = st.text_input("Descrição")
+                    # MUDANÇA: Usando selectbox para categorias
+                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                    valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f"); data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+                    # MUDANÇA: Adicionado campo de observação
+                    observacao = st.text_area("Observações (Opcional)")
                     if st.form_submit_button("Registrar"):
                         if not all([descricao, categoria]): st.error("Descrição e Categoria são obrigatórios.")
                         else:
                             conta_id = next((c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome), None)
-                            sucesso = st.session_state.gerenciador.registrar_transacao(id_conta=conta_id, descricao=descricao, valor=valor, tipo=tipo_transacao, data_transacao=data_transacao, categoria=categoria)
+                            sucesso = st.session_state.gerenciador.registrar_transacao(id_conta=conta_id, descricao=descricao, valor=valor, tipo=tipo_transacao, data_transacao=data_transacao, categoria=categoria, observacao=observacao)
                             if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
                             else: st.error("Falha ao registrar. Saldo insuficiente?")
         st.header("Resumo Financeiro")
+        # ... (código do resumo sem mudanças)
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
             saldos_agrupados = defaultdict(float)
@@ -73,6 +81,7 @@ with tab_dashboard:
             patrimonio_total = sum(c.saldo for c in todas_as_contas); st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
         else: st.metric(label="**Patrimônio Total**", value="R$ 0,00")
     with col1:
+        # ... (código de transferência sem mudanças)
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
@@ -95,7 +104,7 @@ with tab_dashboard:
 
 # --- ABA 2: HISTÓRICO DE TRANSAÇÕES ---
 with tab_transacoes:
-    # ... (código do histórico sem mudanças)
+    # ... (código do histórico sem mudanças na lógica de exclusão)
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
     if not transacoes: st.info("Nenhuma transação registrada ainda.")
@@ -194,63 +203,41 @@ with tab_contas:
                 if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
                 for conta in contas_investimento: render_conta_com_confirmacao(conta)
 
-# --- ABA 4: GESTÃO DE CARTÕES DE CRÉDITO (NOVA) ---
+# --- ABA 4: CARTÕES DE CRÉDITO ---
 with tab_cartoes:
     st.header("Gerenciar Cartões de Crédito")
     col_cartoes1, col_cartoes2 = st.columns(2)
-
     with col_cartoes2:
-        # Formulário para adicionar um novo cartão
         with st.form("add_card_form", clear_on_submit=True):
-            st.subheader("Adicionar Novo Cartão")
-            nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)")
-            logo_url_cartao = st.text_input("URL do Logo (Opcional)")
-            dia_fechamento = st.number_input("Dia do Fechamento da Fatura", min_value=1, max_value=31, value=20)
-            dia_vencimento = st.number_input("Dia do Vencimento da Fatura", min_value=1, max_value=31, value=28)
+            st.subheader("Adicionar Novo Cartão"); nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)"); logo_url_cartao = st.text_input("URL do Logo (Opcional)"); dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=20); dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=28)
             if st.form_submit_button("Adicionar Cartão", use_container_width=True):
                 if not nome_cartao: st.error("O nome do cartão é obrigatório.")
                 else:
                     novo_cartao = CartaoCredito(nome=nome_cartao, logo_url=logo_url_cartao, dia_fechamento=dia_fechamento, dia_vencimento=dia_vencimento)
-                    st.session_state.gerenciador.adicionar_cartao_credito(novo_cartao)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.success(f"Cartão '{nome_cartao}' adicionado!")
-                    st.rerun()
+                    st.session_state.gerenciador.adicionar_cartao_credito(novo_cartao); st.session_state.gerenciador.salvar_dados(); st.success(f"Cartão '{nome_cartao}' adicionado!"); st.rerun()
         
-        # Formulário para lançar uma nova compra
         st.subheader("Lançar Compra no Cartão")
         cartoes_cadastrados = st.session_state.gerenciador.cartoes_credito
-        if not cartoes_cadastrados:
-            st.warning("Adicione um cartão de crédito para poder lançar compras.")
+        if not cartoes_cadastrados: st.warning("Adicione um cartão de crédito para poder lançar compras.")
         else:
             with st.form("add_card_purchase_form", clear_on_submit=True):
-                cartao_selecionado_nome = st.selectbox("Cartão Utilizado", [c.nome for c in cartoes_cadastrados])
-                descricao_compra = st.text_input("Descrição da Compra")
-                categoria_compra = st.text_input("Categoria")
-                valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
-                data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
-                num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
-                
+                cartao_selecionado_nome = st.selectbox("Cartão Utilizado", [c.nome for c in cartoes_cadastrados]); descricao_compra = st.text_input("Descrição da Compra")
+                # MUDANÇA: Usando selectbox para categorias
+                categoria_compra = st.selectbox("Categoria ", st.session_state.gerenciador.categorias)
+                valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f"); data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY"); num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
+                # MUDANÇA: Adicionado campo de observação
+                observacao_compra = st.text_area("Observações (Opcional) ")
                 if st.form_submit_button("Lançar Compra", use_container_width=True):
-                    if not all([descricao_compra, categoria_compra, valor_compra > 0]):
-                        st.error("Preencha todos os detalhes da compra.")
+                    if not all([descricao_compra, categoria_compra, valor_compra > 0]): st.error("Preencha todos os detalhes da compra.")
                     else:
                         id_cartao = next((c.id_cartao for c in cartoes_cadastrados if c.nome == cartao_selecionado_nome), None)
-                        sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                            id_cartao=id_cartao, descricao=descricao_compra, valor_total=valor_compra,
-                            data_compra=data_compra_cartao, categoria=categoria_compra, num_parcelas=num_parcelas
-                        )
-                        if sucesso:
-                            st.session_state.gerenciador.salvar_dados()
-                            st.success("Compra registrada com sucesso!")
-                            st.rerun()
-                        else:
-                            st.error("Falha ao registrar a compra.")
-
+                        sucesso = st.session_state.gerenciador.registrar_compra_cartao(id_cartao=id_cartao, descricao=descricao_compra, valor_total=valor_compra, data_compra=data_compra_cartao, categoria=categoria_compra, num_parcelas=num_parcelas, observacao=observacao_compra)
+                        if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Compra registrada com sucesso!"); st.rerun()
+                        else: st.error("Falha ao registrar a compra.")
     with col_cartoes1:
         st.subheader("Faturas Abertas")
         cartoes = st.session_state.gerenciador.cartoes_credito
-        if not cartoes:
-            st.info("Nenhum cartão de crédito cadastrado.")
+        if not cartoes: st.info("Nenhum cartão de crédito cadastrado.")
         else:
             for cartao in cartoes:
                 logo_col, expander_col = st.columns([1, 5])
@@ -258,17 +245,61 @@ with tab_cartoes:
                     if cartao.logo_url: st.image(cartao.logo_url, width=65)
                     else: st.write("💳")
                 with expander_col:
-                    # Lógica para calcular o valor da fatura atual
                     compras_do_cartao = [c for c in st.session_state.gerenciador.compras_cartao if c.id_cartao == cartao.id_cartao and not c.paga]
                     valor_fatura_aberta = sum(c.valor for c in compras_do_cartao)
-                    
                     with st.expander(f"{cartao.nome} - Fatura Atual: {formatar_moeda(valor_fatura_aberta)}"):
                         st.write(f"**Fechamento:** Dia {cartao.dia_fechamento} | **Vencimento:** Dia {cartao.dia_vencimento}")
                         st.divider()
-                        if not compras_do_cartao:
-                            st.info("Nenhuma compra na fatura aberta.")
+                        if not compras_do_cartao: st.info("Nenhuma compra na fatura aberta.")
                         else:
-                            df_compras = pd.DataFrame([c.para_dict() for c in compras_do_cartao])
-                            df_compras['valor'] = df_compras['valor'].apply(formatar_moeda)
-                            df_compras['data_compra'] = pd.to_datetime(df_compras['data_compra']).dt.strftime('%d/%m/%Y')
-                            st.dataframe(df_compras[['data_compra', 'descricao', 'valor']], use_container_width=True, hide_index=True)
+                            for compra in sorted(compras_do_cartao, key=lambda x: x.data_compra, reverse=True):
+                                # MUDANÇA: Exibindo cada compra com um botão de exclusão
+                                c1, c2 = st.columns([4, 1])
+                                desc = f"{compra.data_compra.strftime('%d/%m')} - {compra.descricao}: {formatar_moeda(compra.valor)}"
+                                c1.text(desc)
+                                with c2:
+                                    if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra (e todas as suas parcelas)"):
+                                        st.session_state.compra_para_excluir = compra.id_compra_original
+                                        st.rerun()
+                                # Diálogo de confirmação para a compra
+                                if st.session_state.compra_para_excluir == compra.id_compra_original:
+                                    st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
+                                    cc1, cc2 = st.columns(2)
+                                    if cc1.button("Sim, excluir", key=f"conf_del_compra_{compra.id_compra}", type="primary"):
+                                        st.session_state.gerenciador.remover_compra_cartao(compra.id_compra_original)
+                                        st.session_state.gerenciador.salvar_dados()
+                                        st.toast("Compra removida!")
+                                        st.session_state.compra_para_excluir = None
+                                        st.rerun()
+                                    if cc2.button("Cancelar", key=f"cancel_del_compra_{compra.id_compra}"):
+                                        st.session_state.compra_para_excluir = None
+                                        st.rerun()
+
+# --- ABA 5: CONFIGURAÇÕES (NOVA) ---
+with tab_config:
+    st.header("⚙️ Configurações Gerais")
+    st.subheader("Gerenciar Categorias")
+    
+    col_cat1, col_cat2 = st.columns(2)
+    with col_cat1:
+        st.write("Categorias existentes:")
+        categorias = st.session_state.gerenciador.categorias
+        if not categorias:
+            st.info("Nenhuma categoria cadastrada.")
+        else:
+            for cat in categorias:
+                cat_col1, cat_col2 = st.columns([4, 1])
+                cat_col1.write(f"- {cat}")
+                if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
+                    st.session_state.gerenciador.remover_categoria(cat)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.rerun()
+    
+    with col_cat2:
+        with st.form("add_category_form", clear_on_submit=True):
+            nova_categoria = st.text_input("Nova Categoria")
+            if st.form_submit_button("Adicionar Categoria"):
+                if nova_categoria:
+                    st.session_state.gerenciador.adicionar_categoria(nova_categoria)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.rerun()
