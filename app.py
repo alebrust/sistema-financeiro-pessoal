@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 41 - INTERFACE DE PORTFÓLIO) ---
+# --- ARQUIVO: app.py (VERSÃO 42 - INTERFACE DE COMPRA DE ATIVOS) ---
 
 import streamlit as st
 import pandas as pd
@@ -6,32 +6,77 @@ from datetime import datetime
 from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento, Ativo
 from collections import defaultdict
 
-# --- FUNÇÃO DE FORMATAÇÃO (sem mudanças) ---
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# --- Configuração da Página ---
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
-# --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
-    # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
-    # Isso é necessário porque a estrutura do JSON mudou drasticamente.
     st.session_state.gerenciador = GerenciadorContas("dados_v5.json")
 
-# --- Título Principal ---
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
-# --- ABAS PRINCIPAIS DA APLICAÇÃO ---
 tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 Histórico de Transações", "🏦 Contas"])
 
-# --- ABA 1: DASHBOARD ---
 with tab_dashboard:
-    # ... (código do Dashboard sem mudanças, ele continuará funcionando)
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
-        with st.expander("💸 Registrar Nova Transação", expanded=True):
+
+        # --- NOVO FORMULÁRIO DE COMPRA DE ATIVO ---
+        with st.expander("📈 Comprar Ativo"):
+            contas_correntes = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)]
+            contas_investimento = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
+
+            if not contas_correntes or not contas_investimento:
+                st.warning("Você precisa de pelo menos uma Conta Corrente (origem do dinheiro) e uma Conta de Investimento (corretora) para comprar um ativo.")
+            else:
+                with st.form("buy_asset_form", clear_on_submit=True):
+                    st.write("**Registrar Compra de Ativo**")
+                    
+                    # Seleção de contas
+                    conta_origem_nome = st.selectbox("Dinheiro saiu de:", [c.nome for c in contas_correntes])
+                    conta_destino_nome = st.selectbox("Ativo custodiado em:", [c.nome for c in contas_investimento])
+                    
+                    # Detalhes do Ativo
+                    ticker = st.text_input("Ticker do Ativo (ex: PETR4, AAPL)").upper()
+                    tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"])
+                    
+                    # Detalhes da Compra
+                    col_qnt, col_preco = st.columns(2)
+                    with col_qnt:
+                        quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
+                    with col_preco:
+                        preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.01, format="%.2f")
+                    
+                    data_compra = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
+
+                    submitted_buy = st.form_submit_button("Confirmar Compra")
+                    if submitted_buy:
+                        if not all([ticker, quantidade > 0, preco_unitario > 0]):
+                            st.error("Preencha todos os detalhes da compra do ativo.")
+                        else:
+                            id_origem = next((c.id_conta for c in contas_correntes if c.nome == conta_origem_nome), None)
+                            id_destino = next((c.id_conta for c in contas_investimento if c.nome == conta_destino_nome), None)
+                            
+                            sucesso = st.session_state.gerenciador.comprar_ativo(
+                                id_conta_origem=id_origem,
+                                id_conta_destino=id_destino,
+                                ticker=ticker,
+                                quantidade=quantidade,
+                                preco_unitario=preco_unitario,
+                                tipo_ativo=tipo_ativo,
+                                data_compra=data_compra
+                            )
+                            if sucesso:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.success(f"Compra de {ticker} registrada com sucesso!")
+                                st.rerun()
+                            else:
+                                st.error("Falha na compra. Verifique o saldo da conta de origem.")
+
+        with st.expander("💸 Registrar Nova Transação"):
+            # ... (código de registrar transação sem mudanças)
             contas_disponiveis = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)]
             if not contas_disponiveis:
                 st.warning("Crie uma Conta Corrente na aba 'Contas' para registrar transações.")
@@ -40,7 +85,6 @@ with tab_dashboard:
                     tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"])
                     conta_selecionada_nome = st.selectbox("Conta", [c.nome for c in contas_disponiveis])
                     descricao = st.text_input("Descrição")
-                    # Para o futuro: Criar uma lista de categorias pré-definidas
                     categoria = st.text_input("Categoria")
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
                     data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
@@ -51,24 +95,28 @@ with tab_dashboard:
                             sucesso = st.session_state.gerenciador.registrar_transacao(id_conta=conta_id, descricao=descricao, valor=valor, tipo=tipo_transacao, data_transacao=data_transacao, categoria=categoria)
                             if sucesso: st.session_state.gerenciador.salvar_dados(); st.success("Transação registrada!"); st.rerun()
                             else: st.error("Falha ao registrar. Saldo insuficiente?")
+        
         st.header("Resumo Financeiro")
+        # ... (código do resumo sem mudanças)
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
             saldos_agrupados = defaultdict(float)
             for conta in todas_as_contas:
                 if isinstance(conta, ContaCorrente): saldos_agrupados["Contas Correntes"] += conta.saldo
                 elif isinstance(conta, ContaInvestimento):
-                    for ativo in conta.ativos:
-                        saldos_agrupados[ativo.tipo_ativo] += ativo.valor_total
+                    for ativo in conta.ativos: saldos_agrupados[ativo.tipo_ativo] += ativo.valor_total
             st.subheader("Patrimônio por Categoria")
             for categoria, saldo in saldos_agrupados.items(): st.metric(label=categoria, value=formatar_moeda(saldo))
             st.divider()
             patrimonio_total = sum(c.saldo for c in todas_as_contas)
             st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
         else: st.metric(label="**Patrimônio Total**", value="R$ 0,00")
+
     with col1:
         st.header("Realizar Transferência")
-        contas_para_transferencia = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)]
+        # ... (código de transferência sem mudanças)
+        todas_as_contas = st.session_state.gerenciador.contas
+        contas_para_transferencia = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
         if len(contas_para_transferencia) >= 1 and len(todas_as_contas) >= 2:
             with st.form("transfer_form", clear_on_submit=True):
                 nomes_contas = [c.nome for c in todas_as_contas]
@@ -99,52 +147,37 @@ with tab_transacoes:
         df = pd.DataFrame(dados_df)
         st.dataframe(df, use_container_width=True, hide_index=True)
 
-# --- ABA 3: GESTÃO DE CONTAS (GRANDES MUDANÇAS) ---
+# --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
+    # ... (código de gestão de contas sem mudanças)
     st.header("Gerenciar Contas")
-    col_contas1, col_contas2 = st.columns(2)
-    
+    col_contas1, col_contas2 = st.columns(2);
     with col_contas2:
-        # MUDANÇA: Formulário de adição simplificado para Conta de Investimento
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta")
             tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
             nome_conta = st.text_input("Nome da Conta")
             logo_url_add = st.text_input("URL do Logo (Opcional)")
-            
             if tipo_conta == "Conta Corrente":
                 saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
                 limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
-            
-            submitted_add = st.form_submit_button("Adicionar Conta", use_container_width=True)
-            if submitted_add:
+            if st.form_submit_button("Adicionar Conta", use_container_width=True):
                 if not nome_conta: st.error("O nome da conta é obrigatório.")
                 else:
                     nova_conta = None
-                    if tipo_conta == "Conta Corrente":
-                        nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
-                    else: # Conta de Investimento
-                        nova_conta = ContaInvestimento(nome=nome_conta, logo_url=logo_url_add)
-                    
-                    if nova_conta:
-                        st.session_state.gerenciador.adicionar_conta(nova_conta)
-                        st.session_state.gerenciador.salvar_dados()
-                        st.success(f"Conta '{nome_conta}' adicionada!")
-                        st.rerun()
-    
+                    if tipo_conta == "Conta Corrente": nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
+                    else: nova_conta = ContaInvestimento(nome=nome_conta, logo_url=logo_url_add)
+                    if nova_conta: st.session_state.gerenciador.adicionar_conta(nova_conta); st.session_state.gerenciador.salvar_dados(); st.success(f"Conta '{nome_conta}' adicionada!"); st.rerun()
     with col_contas1:
         st.subheader("Contas Existentes")
         todas_as_contas = st.session_state.gerenciador.contas
         if not todas_as_contas: st.info("Nenhuma conta cadastrada.")
         else:
-            # MUDANÇA: Lógica de exibição separada para cada tipo de conta
             tab_cc_ger, tab_ci_ger = st.tabs(["Contas Correntes", "Contas de Investimento"])
-            
             with tab_cc_ger:
                 contas_correntes = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
                 if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
                 for conta in contas_correntes:
-                    # ... (código de exibição/edição da Conta Corrente, sem mudanças)
                     logo_col, expander_col = st.columns([1, 5]);
                     with logo_col:
                         if conta.logo_url: st.image(conta.logo_url, width=65)
@@ -160,7 +193,6 @@ with tab_contas:
                                     if nome_mudou or logo_mudou or attr_mudou: st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{novo_nome}' atualizada!"); st.rerun()
                             if st.button(f"Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
                                 if st.session_state.gerenciador.remover_conta(conta.id_conta): st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
-
             with tab_ci_ger:
                 contas_investimento = [c for c in todas_as_contas if isinstance(c, ContaInvestimento)]
                 if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
@@ -171,31 +203,19 @@ with tab_contas:
                         else: st.write("📈")
                     with expander_col:
                         with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
-                            # MUDANÇA: Exibindo a lista de ativos em vez de um formulário de edição
                             st.write(f"**Patrimônio Consolidado:** {formatar_moeda(conta.saldo)}")
-                            
-                            # Agrupando ativos por tipo para subtotais
                             ativos_agrupados = defaultdict(float)
-                            for ativo in conta.ativos:
-                                ativos_agrupados[ativo.tipo_ativo] += ativo.valor_total
-                            
+                            for ativo in conta.ativos: ativos_agrupados[ativo.tipo_ativo] += ativo.valor_total
                             if ativos_agrupados:
                                 st.write("**Posição por Tipo de Ativo:**")
-                                for tipo, subtotal in ativos_agrupados.items():
-                                    st.text(f"- {tipo}: {formatar_moeda(subtotal)}")
-                            
+                                for tipo, subtotal in ativos_agrupados.items(): st.text(f"- {tipo}: {formatar_moeda(subtotal)}")
                             st.divider()
-                            
-                            if not conta.ativos:
-                                st.info("Nenhum ativo nesta conta ainda. A próxima etapa será adicionar operações de compra.")
+                            if not conta.ativos: st.info("Nenhum ativo nesta conta ainda.")
                             else:
                                 st.write("**Ativos em Carteira:**")
                                 df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
                                 df_ativos["valor_total"] = df_ativos.apply(lambda row: formatar_moeda(row["quantidade"] * row["preco_medio"]), axis=1)
                                 df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
                                 st.dataframe(df_ativos[['ticker', 'quantidade', 'preco_medio', 'tipo_ativo', 'valor_total']], use_container_width=True, hide_index=True)
-                            
-                            # Botão de remover a conta de investimento inteira
                             if st.button(f"Remover Corretora '{conta.nome}'", key=f"remove_{conta.id_conta}", type="primary"):
-                                if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                                    st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
+                                if st.session_state.gerenciador.remover_conta(conta.id_conta): st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.rerun()
