@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 48 - ESTRUTURA CARTÃO DE CRÉDITO) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 49 - CORREÇÃO DO IMPORT ERROR) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -6,7 +6,7 @@ from uuid import uuid4
 from datetime import date
 from typing import List, Optional, Dict, Any
 
-# --- NOVAS CLASSES ---
+# --- NOVAS CLASSES QUE ESTAVAM FALTANDO ---
 class CartaoCredito:
     """Representa um cartão de crédito como uma entidade separada (um passivo)."""
     def __init__(self, nome: str, dia_fechamento: int, dia_vencimento: int, id_cartao: str = None, logo_url: str = ""):
@@ -26,7 +26,6 @@ class CompraCartao:
     def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, 
                  total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None):
         self.id_compra = id_compra if id_compra else str(uuid4())
-        # id_compra_original agrupa as parcelas de uma mesma compra
         self.id_compra_original = id_compra_original if id_compra_original else self.id_compra
         self.id_cartao = id_cartao
         self.descricao = descricao
@@ -35,15 +34,14 @@ class CompraCartao:
         self.categoria = categoria
         self.total_parcelas = total_parcelas
         self.parcela_atual = parcela_atual
-        self.paga = False # Controle para saber se a fatura desta compra foi paga
+        self.paga = False
 
     def para_dict(self) -> Dict[str, Any]:
-        # Copia os atributos para não modificar o objeto original
         d = self.__dict__.copy()
         d['data_compra'] = self.data_compra.isoformat()
         return d
 
-# --- Classes Ativo e Transacao (sem mudanças) ---
+# --- O RESTO DO CÓDIGO ---
 class Ativo:
     def __init__(self, ticker: str, quantidade: float, preco_medio: float, tipo_ativo: str):
         self.ticker, self.quantidade, self.preco_medio, self.tipo_ativo = ticker, quantidade, preco_medio, tipo_ativo
@@ -61,7 +59,6 @@ class Transacao:
         d['data'] = self.data.isoformat()
         return d
 
-# --- Classes de Conta (sem mudanças) ---
 class Conta(ABC):
     def __init__(self, nome: str, saldo: float = 0.0, id_conta: str = None, logo_url: str = ""):
         self._id_conta, self._nome, self._saldo, self._logo_url = (id_conta if id_conta else str(uuid4()), nome, saldo, logo_url if logo_url else "")
@@ -144,13 +141,12 @@ class ContaInvestimento(Conta):
     def para_dict(self) -> Dict[str, Any]:
         dados = super().para_dict(); dados["ativos"] = [ativo.para_dict() for ativo in self._ativos]; return dados
 
-# --- ATUALIZAÇÃO MASSIVA NO GERENCIADOR ---
 class GerenciadorContas:
     def __init__(self, arquivo_dados: str):
         self._contas: List[Conta] = []
         self._transacoes: List[Transacao] = []
-        self._cartoes_credito: List[CartaoCredito] = [] # NOVA LISTA
-        self._compras_cartao: List[CompraCartao] = []   # NOVA LISTA
+        self._cartoes_credito: List[CartaoCredito] = []
+        self._compras_cartao: List[CompraCartao] = []
         self._arquivo_dados = arquivo_dados
         self.carregar_dados()
     
@@ -170,16 +166,14 @@ class GerenciadorContas:
         dados_completos = {
             "contas": [c.para_dict() for c in self._contas],
             "transacoes": [t.para_dict() for t in self._transacoes],
-            "cartoes_credito": [cc.para_dict() for cc in self._cartoes_credito], # ADICIONADO
-            "compras_cartao": [cp.para_dict() for cp in self._compras_cartao]    # ADICIONADO
+            "cartoes_credito": [cc.para_dict() for cc in self._cartoes_credito],
+            "compras_cartao": [cp.para_dict() for cp in self._compras_cartao]
         }
         with open(self._arquivo_dados, 'w', encoding='utf-8') as f: json.dump(dados_completos, f, indent=4, ensure_ascii=False)
 
     def carregar_dados(self):
         try:
             with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
-            
-            # Carregar Contas e Ativos (lógica existente)
             self._contas = []
             for dados_conta in dados_completos.get("contas", []):
                 tipo_classe = dados_conta.pop("tipo_classe")
@@ -188,25 +182,19 @@ class GerenciadorContas:
                     lista_ativos_dados = dados_conta.pop("ativos", []); nova_conta_invest = ContaInvestimento(**dados_conta)
                     for dados_ativo in lista_ativos_dados: nova_conta_invest.adicionar_ativo(Ativo(**dados_ativo))
                     self._contas.append(nova_conta_invest)
-            
-            # Carregar Transações (lógica existente)
             self._transacoes = []
             for dados_transacao in dados_completos.get("transacoes", []):
                 dados_transacao["data_transacao"] = date.fromisoformat(dados_transacao.pop("data"))
                 if "categoria" not in dados_transacao: dados_transacao["categoria"] = "Não categorizado"
                 self._transacoes.append(Transacao(**dados_transacao))
-
-            # CARREGAR NOVAS ESTRUTURAS
             self._cartoes_credito = [CartaoCredito(**d) for d in dados_completos.get("cartoes_credito", [])]
             self._compras_cartao = []
             for d in dados_completos.get("compras_cartao", []):
                 d["data_compra"] = date.fromisoformat(d.pop("data_compra"))
                 self._compras_cartao.append(CompraCartao(**d))
-
         except (FileNotFoundError, json.JSONDecodeError):
             self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao = [], [], [], []
     
-    # ... (outros métodos do Gerenciador)
     def comprar_ativo(self, id_conta_destino: str, ticker: str, quantidade: float, preco_unitario: float, tipo_ativo: str, data_compra: date) -> bool:
         conta_destino = self.buscar_conta_por_id(id_conta_destino)
         if not isinstance(conta_destino, ContaInvestimento): return False
