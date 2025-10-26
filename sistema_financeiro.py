@@ -1,47 +1,28 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 49 - CORREÇÃO DO IMPORT ERROR) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 50 - REGISTRO DE COMPRA NO CARTÃO) ---
 
 import json
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from datetime import date
 from typing import List, Optional, Dict, Any
+from dateutil.relativedelta import relativedelta # Biblioteca para manipular datas
 
-# --- NOVAS CLASSES QUE ESTAVAM FALTANDO ---
+# ... (Classes CartaoCredito, CompraCartao, Ativo, Transacao, Conta, ContaCorrente, ContaInvestimento sem mudanças) ...
 class CartaoCredito:
-    """Representa um cartão de crédito como uma entidade separada (um passivo)."""
     def __init__(self, nome: str, dia_fechamento: int, dia_vencimento: int, id_cartao: str = None, logo_url: str = ""):
-        if not (1 <= dia_fechamento <= 31 and 1 <= dia_vencimento <= 31):
-            raise ValueError("Dias de fechamento e vencimento devem ser válidos.")
-        self.id_cartao = id_cartao if id_cartao else str(uuid4())
-        self.nome = nome
-        self.logo_url = logo_url
-        self.dia_fechamento = dia_fechamento
-        self.dia_vencimento = dia_vencimento
-
-    def para_dict(self) -> Dict[str, Any]:
-        return self.__dict__
+        if not (1 <= dia_fechamento <= 31 and 1 <= dia_vencimento <= 31): raise ValueError("Dias de fechamento e vencimento devem ser válidos.")
+        self.id_cartao, self.nome, self.logo_url, self.dia_fechamento, self.dia_vencimento = (id_cartao if id_cartao else str(uuid4()), nome, logo_url, dia_fechamento, dia_vencimento)
+    def para_dict(self) -> Dict[str, Any]: return self.__dict__
 
 class CompraCartao:
-    """Representa uma única compra (ou uma parcela) feita no cartão de crédito."""
-    def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, 
-                 total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None):
+    def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None):
         self.id_compra = id_compra if id_compra else str(uuid4())
         self.id_compra_original = id_compra_original if id_compra_original else self.id_compra
-        self.id_cartao = id_cartao
-        self.descricao = descricao
-        self.valor = valor
-        self.data_compra = data_compra
-        self.categoria = categoria
-        self.total_parcelas = total_parcelas
-        self.parcela_atual = parcela_atual
+        self.id_cartao, self.descricao, self.valor, self.data_compra, self.categoria, self.total_parcelas, self.parcela_atual = id_cartao, descricao, valor, data_compra, categoria, total_parcelas, parcela_atual
         self.paga = False
-
     def para_dict(self) -> Dict[str, Any]:
-        d = self.__dict__.copy()
-        d['data_compra'] = self.data_compra.isoformat()
-        return d
+        d = self.__dict__.copy(); d['data_compra'] = self.data_compra.isoformat(); return d
 
-# --- O RESTO DO CÓDIGO ---
 class Ativo:
     def __init__(self, ticker: str, quantidade: float, preco_medio: float, tipo_ativo: str):
         self.ticker, self.quantidade, self.preco_medio, self.tipo_ativo = ticker, quantidade, preco_medio, tipo_ativo
@@ -52,12 +33,9 @@ class Ativo:
 class Transacao:
     def __init__(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str, id_transacao: str = None, detalhes_operacao: Dict = None):
         self.id_transacao = id_transacao if id_transacao else str(uuid4())
-        self.id_conta, self.descricao, self.valor, self.tipo, self.data, self.categoria = id_conta, descricao, valor, tipo, data_transacao, categoria
-        self.detalhes_operacao = detalhes_operacao if detalhes_operacao else {}
+        self.id_conta, self.descricao, self.valor, self.tipo, self.data, self.categoria, self.detalhes_operacao = id_conta, descricao, valor, tipo, data_transacao, categoria, detalhes_operacao if detalhes_operacao else {}
     def para_dict(self) -> Dict[str, Any]:
-        d = self.__dict__.copy()
-        d['data'] = self.data.isoformat()
-        return d
+        d = self.__dict__.copy(); d['data'] = self.data.isoformat(); return d
 
 class Conta(ABC):
     def __init__(self, nome: str, saldo: float = 0.0, id_conta: str = None, logo_url: str = ""):
@@ -141,6 +119,7 @@ class ContaInvestimento(Conta):
     def para_dict(self) -> Dict[str, Any]:
         dados = super().para_dict(); dados["ativos"] = [ativo.para_dict() for ativo in self._ativos]; return dados
 
+# --- ATUALIZAÇÃO MASSIVA NO GERENCIADOR ---
 class GerenciadorContas:
     def __init__(self, arquivo_dados: str):
         self._contas: List[Conta] = []
@@ -162,15 +141,50 @@ class GerenciadorContas:
     def adicionar_cartao_credito(self, cartao: CartaoCredito):
         self._cartoes_credito.append(cartao)
 
-    def salvar_dados(self):
-        dados_completos = {
-            "contas": [c.para_dict() for c in self._contas],
-            "transacoes": [t.para_dict() for t in self._transacoes],
-            "cartoes_credito": [cc.para_dict() for cc in self._cartoes_credito],
-            "compras_cartao": [cp.para_dict() for cp in self._compras_cartao]
-        }
-        with open(self._arquivo_dados, 'w', encoding='utf-8') as f: json.dump(dados_completos, f, indent=4, ensure_ascii=False)
+    def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]:
+        return next((c for c in self._cartoes_credito if c.id_cartao == id_cartao), None)
 
+    # --- NOVO MÉTODO DE REGISTRO DE COMPRA ---
+    def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1):
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao: return False
+
+        valor_parcela = round(valor_total / num_parcelas, 2)
+        id_compra_original = str(uuid4()) # ID único para agrupar as parcelas
+
+        for i in range(num_parcelas):
+            # Lógica para determinar a data de vencimento da parcela (simplificada)
+            # Se a compra foi antes do fechamento, cai na fatura do mesmo mês. Senão, no próximo.
+            mes_fatura = data_compra.month
+            ano_fatura = data_compra.year
+            if data_compra.day >= cartao.dia_fechamento:
+                # Adiciona um mês à data da compra para encontrar o mês da fatura
+                nova_data = data_compra + relativedelta(months=1)
+                mes_fatura = nova_data.month
+                ano_fatura = nova_data.year
+
+            # Adiciona os meses das parcelas subsequentes
+            data_vencimento_parcela = date(ano_fatura, mes_fatura, cartao.dia_vencimento) + relativedelta(months=i)
+
+            desc_parcela = f"{descricao} ({i+1}/{num_parcelas})"
+            
+            nova_compra = CompraCartao(
+                id_cartao=id_cartao,
+                descricao=desc_parcela,
+                valor=valor_parcela,
+                data_compra=data_vencimento_parcela, # Usamos a data de vencimento da fatura como a "data da compra" para agrupar
+                categoria=categoria,
+                total_parcelas=num_parcelas,
+                parcela_atual=i + 1,
+                id_compra_original=id_compra_original
+            )
+            self._compras_cartao.append(nova_compra)
+        return True
+
+    # ... (resto do Gerenciador)
+    def salvar_dados(self):
+        dados_completos = {"contas": [c.para_dict() for c in self._contas], "transacoes": [t.para_dict() for t in self._transacoes], "cartoes_credito": [cc.para_dict() for cc in self._cartoes_credito], "compras_cartao": [cp.para_dict() for cp in self._compras_cartao]}
+        with open(self._arquivo_dados, 'w', encoding='utf-8') as f: json.dump(dados_completos, f, indent=4, ensure_ascii=False)
     def carregar_dados(self):
         try:
             with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
@@ -192,9 +206,7 @@ class GerenciadorContas:
             for d in dados_completos.get("compras_cartao", []):
                 d["data_compra"] = date.fromisoformat(d.pop("data_compra"))
                 self._compras_cartao.append(CompraCartao(**d))
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao = [], [], [], []
-    
+        except (FileNotFoundError, json.JSONDecodeError): self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao = [], [], [], []
     def comprar_ativo(self, id_conta_destino: str, ticker: str, quantidade: float, preco_unitario: float, tipo_ativo: str, data_compra: date) -> bool:
         conta_destino = self.buscar_conta_por_id(id_conta_destino)
         if not isinstance(conta_destino, ContaInvestimento): return False
