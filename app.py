@@ -1,9 +1,9 @@
-# --- ARQUIVO: app.py (VERSÃO 47 - CONFIRMAÇÃO DE EXCLUSÃO DE CONTA) ---
+# --- ARQUIVO: app.py (VERSÃO 48 - INTERFACE DE CARTÃO DE CRÉDITO) ---
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento, Ativo
+from datetime import datetime, date
+from sistema_financeiro import GerenciadorContas, ContaCorrente, ContaInvestimento, Ativo, CartaoCredito
 from collections import defaultdict
 
 def formatar_moeda(valor):
@@ -11,19 +11,18 @@ def formatar_moeda(valor):
 
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
-# --- Inicialização do Sistema ---
 if 'gerenciador' not in st.session_state:
-    st.session_state.gerenciador = GerenciadorContas("dados_v8.json")
+    # IMPORTANTE: Mude o nome do arquivo para forçar uma recriação da base de dados
+    st.session_state.gerenciador = GerenciadorContas("dados_v9.json")
 
-# --- MUDANÇA 1: Inicializando os estados de confirmação ---
-if 'transacao_para_excluir' not in st.session_state:
-    st.session_state.transacao_para_excluir = None
-if 'conta_para_excluir' not in st.session_state:
-    st.session_state.conta_para_excluir = None
+# Inicializando os estados de confirmação
+if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_para_excluir = None
+if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
-tab_dashboard, tab_transacoes, tab_contas = st.tabs(["📊 Dashboard", "📈 Histórico de Transações", "🏦 Contas"])
+# --- MUDANÇA 1: Adicionando a nova aba de Cartões ---
+tab_dashboard, tab_transacoes, tab_contas, tab_cartoes = st.tabs(["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões de Crédito"])
 
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
@@ -135,10 +134,9 @@ with tab_transacoes:
 
 # --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
-    st.header("Gerenciar Contas")
-    col_contas1, col_contas2 = st.columns(2)
+    # ... (código da aba Contas sem mudanças)
+    st.header("Gerenciar Contas"); col_contas1, col_contas2 = st.columns(2)
     with col_contas2:
-        # ... (código de adicionar conta sem mudanças)
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta"); tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"]); nome_conta = st.text_input("Nome da Conta"); logo_url_add = st.text_input("URL do Logo (Opcional)")
             if tipo_conta == "Conta Corrente":
@@ -150,23 +148,18 @@ with tab_contas:
                     if tipo_conta == "Conta Corrente": nova_conta = ContaCorrente(nome=nome_conta, saldo=saldo_inicial, limite_cheque_especial=limite, logo_url=logo_url_add)
                     else: nova_conta = ContaInvestimento(nome=nome_conta, logo_url=logo_url_add)
                     if nova_conta: st.session_state.gerenciador.adicionar_conta(nova_conta); st.session_state.gerenciador.salvar_dados(); st.success(f"Conta '{nome_conta}' adicionada!"); st.rerun()
-    
     with col_contas1:
-        st.subheader("Contas Existentes")
-        todas_as_contas = st.session_state.gerenciador.contas
+        st.subheader("Contas Existentes"); todas_as_contas = st.session_state.gerenciador.contas
         if not todas_as_contas: st.info("Nenhuma conta cadastrada.")
         else:
             tab_cc_ger, tab_ci_ger = st.tabs(["Contas Correntes", "Contas de Investimento"])
-            
-            # --- MUDANÇA PRINCIPAL AQUI ---
             def render_conta_com_confirmacao(conta):
-                logo_col, expander_col = st.columns([1, 5])
+                logo_col, expander_col = st.columns([1, 5]);
                 with logo_col:
                     if conta.logo_url: st.image(conta.logo_url, width=65)
                     else: st.write("🏦" if isinstance(conta, ContaCorrente) else "📈")
                 with expander_col:
                     with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
-                        # ... (código de edição e detalhes internos)
                         if isinstance(conta, ContaCorrente): st.write(f"**Limite:** {formatar_moeda(conta.limite_cheque_especial)}")
                         elif isinstance(conta, ContaInvestimento):
                             st.metric("Patrimônio Consolidado", formatar_moeda(conta.saldo)); col_caixa, col_ativos = st.columns(2)
@@ -177,42 +170,71 @@ with tab_contas:
                                 df_ativos["valor_total"] = df_ativos.apply(lambda row: formatar_moeda(row["quantidade"] * row["preco_medio"]), axis=1)
                                 df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
                                 st.dataframe(df_ativos[['ticker', 'quantidade', 'preco_medio', 'tipo_ativo', 'valor_total']], use_container_width=True, hide_index=True)
-                        
                         st.divider()
                         with st.form(f"edit_form_{conta.id_conta}"):
-                            # ... (formulário de edição sem mudanças)
                             novo_nome = st.text_input("Nome", value=conta.nome); nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
                             if isinstance(conta, ContaCorrente): novo_limite = st.number_input("Limite", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f")
-                            elif isinstance(conta, ContaInvestimento): novo_tipo_invest = st.text_input("Tipo de Investimento", value=conta.tipo_investimento)
+                            elif isinstance(conta, ContaInvestimento): pass # Edição de ativos será separada
                             if st.form_submit_button("Salvar Alterações"):
                                 nome_mudou = conta.editar_nome(novo_nome); logo_mudou = conta.editar_logo_url(nova_logo_url); attr_mudou = False
                                 if isinstance(conta, ContaCorrente): attr_mudou = conta.editar_limite(novo_limite)
-                                elif isinstance(conta, ContaInvestimento): attr_mudou = conta.editar_tipo_investimento(novo_tipo_invest)
                                 if nome_mudou or logo_mudou or attr_mudou: st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{novo_nome}' atualizada!"); st.rerun()
-                        
-                        # Lógica de exclusão com confirmação
-                        if st.button("Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
-                            st.session_state.conta_para_excluir = conta.id_conta
-                            st.rerun()
-
-                # Diálogo de confirmação fora do expander, mas dentro da coluna
+                        if st.button("Remover Conta", key=f"remove_{conta.id_conta}", type="primary"): st.session_state.conta_para_excluir = conta.id_conta; st.rerun()
                 if st.session_state.conta_para_excluir == conta.id_conta:
-                    st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir a conta '{conta.nome}'? Esta ação é irreversível e removerá todos os ativos e transações associados a ela.")
-                    col_confirm, col_cancel, _ = st.columns([1, 1, 4])
+                    st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir a conta '{conta.nome}'?"); col_confirm, col_cancel, _ = st.columns([1, 1, 4])
                     with col_confirm:
                         if st.button("Sim, excluir permanentemente", key=f"confirm_del_acc_{conta.id_conta}", type="primary"):
-                            if st.session_state.gerenciador.remover_conta(conta.id_conta):
-                                st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.session_state.conta_para_excluir = None; st.rerun()
+                            if st.session_state.gerenciador.remover_conta(conta.id_conta): st.session_state.gerenciador.salvar_dados(); st.toast(f"Conta '{conta.nome}' removida!"); st.session_state.conta_para_excluir = None; st.rerun()
                     with col_cancel:
-                        if st.button("Cancelar", key=f"cancel_del_acc_{conta.id_conta}"):
-                            st.session_state.conta_para_excluir = None; st.rerun()
-
+                        if st.button("Cancelar", key=f"cancel_del_acc_{conta.id_conta}"): st.session_state.conta_para_excluir = None; st.rerun()
             with tab_cc_ger:
                 contas_correntes = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
                 if not contas_correntes: st.info("Nenhuma conta corrente cadastrada.")
                 for conta in contas_correntes: render_conta_com_confirmacao(conta)
-            
             with tab_ci_ger:
                 contas_investimento = [c for c in todas_as_contas if isinstance(c, ContaInvestimento)]
                 if not contas_investimento: st.info("Nenhuma conta de investimento cadastrada.")
                 for conta in contas_investimento: render_conta_com_confirmacao(conta)
+
+# --- ABA 4: GESTÃO DE CARTÕES DE CRÉDITO (NOVA) ---
+with tab_cartoes:
+    st.header("Gerenciar Cartões de Crédito")
+    col_cartoes1, col_cartoes2 = st.columns(2)
+
+    with col_cartoes2:
+        with st.form("add_card_form", clear_on_submit=True):
+            st.subheader("Adicionar Novo Cartão")
+            nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)")
+            logo_url_cartao = st.text_input("URL do Logo (Opcional)")
+            dia_fechamento = st.number_input("Dia do Fechamento da Fatura", min_value=1, max_value=31, value=20)
+            dia_vencimento = st.number_input("Dia do Vencimento da Fatura", min_value=1, max_value=31, value=28)
+            
+            if st.form_submit_button("Adicionar Cartão", use_container_width=True):
+                if not nome_cartao:
+                    st.error("O nome do cartão é obrigatório.")
+                else:
+                    novo_cartao = CartaoCredito(
+                        nome=nome_cartao,
+                        logo_url=logo_url_cartao,
+                        dia_fechamento=dia_fechamento,
+                        dia_vencimento=dia_vencimento
+                    )
+                    st.session_state.gerenciador.adicionar_cartao_credito(novo_cartao)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.success(f"Cartão '{nome_cartao}' adicionado!")
+                    st.rerun()
+
+    with col_cartoes1:
+        st.subheader("Cartões Cadastrados")
+        cartoes = st.session_state.gerenciador.cartoes_credito
+        if not cartoes:
+            st.info("Nenhum cartão de crédito cadastrado.")
+        else:
+            for cartao in cartoes:
+                logo_col, expander_col = st.columns([1, 5])
+                with logo_col:
+                    if cartao.logo_url: st.image(cartao.logo_url, width=65)
+                    else: st.write("💳")
+                with expander_col:
+                    # Lógica para calcular fatura aberta virá aqui no futuro
+                    st.info(f"**{cartao.nome}** - Fatura atual: {formatar_moeda(0)}")
