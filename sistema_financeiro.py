@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 64 - CORREÇÃO FINAL DE RETROCOMPATIBILIDADE) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 65 - CORREÇÃO FINAL DE CARREGAMENTO) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -147,6 +147,7 @@ class GerenciadorContas:
     def carregar_dados(self):
         try:
             with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
+            
             self._contas = []
             for dados_conta in dados_completos.get("contas", []):
                 tipo_classe = dados_conta.pop("tipo_classe")
@@ -155,26 +156,50 @@ class GerenciadorContas:
                     lista_ativos_dados = dados_conta.pop("ativos", []); nova_conta_invest = ContaInvestimento(**dados_conta)
                     for dados_ativo in lista_ativos_dados: nova_conta_invest.adicionar_ativo(Ativo(**dados_ativo))
                     self._contas.append(nova_conta_invest)
+
             self._transacoes = []
             for d in dados_completos.get("transacoes", []):
-                d["data_transacao"] = date.fromisoformat(d.pop("data"))
-                if "categoria" not in d: d["categoria"] = "Não categorizado"
-                if "observacao" not in d: d["observacao"] = ""
-                if "detalhes_operacao" not in d: d["detalhes_operacao"] = None
-                self._transacoes.append(Transacao(**d))
+                # --- MUDANÇA PRINCIPAL AQUI ---
+                # Usamos .get() para cada campo que pode não existir em dados antigos
+                args = {
+                    "id_conta": d.get("id_conta"),
+                    "descricao": d.get("descricao"),
+                    "valor": d.get("valor"),
+                    "tipo": d.get("tipo"),
+                    "data_transacao": date.fromisoformat(d.get("data")),
+                    "categoria": d.get("categoria", "Não categorizado"),
+                    "id_transacao": d.get("id_transacao"),
+                    "detalhes_operacao": d.get("detalhes_operacao"),
+                    "observacao": d.get("observacao", "")
+                }
+                self._transacoes.append(Transacao(**args))
+
             self._cartoes_credito = [CartaoCredito(**d) for d in dados_completos.get("cartoes_credito", [])]
+            
             self._compras_cartao = []
             for d in dados_completos.get("compras_cartao", []):
-                d["data_compra"] = date.fromisoformat(d.pop("data_compra"))
                 # --- MUDANÇA PRINCIPAL AQUI ---
-                if "observacao" not in d: d["observacao"] = ""
-                if "id_fatura" not in d: d["id_fatura"] = None
-                self._compras_cartao.append(CompraCartao(**d))
+                args = {
+                    "id_cartao": d.get("id_cartao"),
+                    "descricao": d.get("descricao"),
+                    "valor": d.get("valor"),
+                    "data_compra": date.fromisoformat(d.get("data_compra")),
+                    "categoria": d.get("categoria", "Não categorizado"),
+                    "total_parcelas": d.get("total_parcelas", 1),
+                    "parcela_atual": d.get("parcela_atual", 1),
+                    "id_compra": d.get("id_compra"),
+                    "id_compra_original": d.get("id_compra_original"),
+                    "observacao": d.get("observacao", ""),
+                    "id_fatura": d.get("id_fatura")
+                }
+                self._compras_cartao.append(CompraCartao(**args))
+
             self._faturas = []
             for d in dados_completos.get("faturas", []):
                 d["data_fechamento"] = date.fromisoformat(d.pop("data_fechamento"))
                 d["data_vencimento"] = date.fromisoformat(d.pop("data_vencimento"))
                 self._faturas.append(Fatura(**d))
+            
             self._categorias = dados_completos.get("categorias", ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"])
         except (FileNotFoundError, json.JSONDecodeError):
             self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao, self._faturas, self._categorias = [], [], [], [], [], ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"]
