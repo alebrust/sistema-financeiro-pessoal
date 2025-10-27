@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 68 - CARREGAMENTO À PROVA DE FALHAS) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 69 - CORREÇÃO FINAL DO ATTRIBUTEERROR) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -144,56 +144,35 @@ class GerenciadorContas:
     @property
     def faturas(self) -> List[Fatura]: return self._faturas
 
+    # --- MÉTODO RESTAURADO ---
+    def obter_compras_fatura_aberta(self, id_cartao: str):
+        """Retorna todas as compras ainda não associadas a nenhuma fatura fechada."""
+        return [c for c in self._compras_cartao if c.id_cartao == id_cartao and c.id_fatura is None]
+
     def carregar_dados(self):
         try:
             with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
-            
             self._contas = []
             for d in dados_completos.get("contas", []):
                 tipo_classe = d.pop("tipo_classe")
                 if tipo_classe == "ContaCorrente": self._contas.append(ContaCorrente(**d))
                 elif tipo_classe == "ContaInvestimento":
-                    ativos_data = d.pop("ativos", [])
-                    conta_invest = ContaInvestimento(**d)
+                    ativos_data = d.pop("ativos", []); conta_invest = ContaInvestimento(**d)
                     for ativo_d in ativos_data: conta_invest.adicionar_ativo(Ativo(**ativo_d))
                     self._contas.append(conta_invest)
-
             self._transacoes = []
             for d in dados_completos.get("transacoes", []):
-                args = {
-                    "id_conta": d.get("id_conta"), "descricao": d.get("descricao"), "valor": d.get("valor"),
-                    "tipo": d.get("tipo"), "data_transacao": date.fromisoformat(d.get("data")),
-                    "categoria": d.get("categoria", "Não categorizado"), "id_transacao": d.get("id_transacao"),
-                    "detalhes_operacao": d.get("detalhes_operacao"), "observacao": d.get("observacao", "")
-                }
+                args = {"id_conta": d.get("id_conta"), "descricao": d.get("descricao"), "valor": d.get("valor"), "tipo": d.get("tipo"), "data_transacao": date.fromisoformat(d.get("data")), "categoria": d.get("categoria", "Não categorizado"), "id_transacao": d.get("id_transacao"), "detalhes_operacao": d.get("detalhes_operacao"), "observacao": d.get("observacao", "")}
                 self._transacoes.append(Transacao(**args))
-
             self._cartoes_credito = [CartaoCredito(**d) for d in dados_completos.get("cartoes_credito", [])]
-            
             self._compras_cartao = []
             for d in dados_completos.get("compras_cartao", []):
-                # --- MUDANÇA PRINCIPAL AQUI ---
-                args = {
-                    "id_cartao": d.get("id_cartao"), "descricao": d.get("descricao"), "valor": d.get("valor"),
-                    "data_compra": date.fromisoformat(d.get("data_compra")),
-                    "categoria": d.get("categoria", "Não categorizado"),
-                    "total_parcelas": d.get("total_parcelas", 1), "parcela_atual": d.get("parcela_atual", 1),
-                    "id_compra": d.get("id_compra"), "id_compra_original": d.get("id_compra_original"),
-                    "observacao": d.get("observacao", ""), "id_fatura": d.get("id_fatura")
-                }
+                args = {"id_cartao": d.get("id_cartao"), "descricao": d.get("descricao"), "valor": d.get("valor"), "data_compra": date.fromisoformat(d.get("data_compra")), "categoria": d.get("categoria", "Não categorizado"), "total_parcelas": d.get("total_parcelas", 1), "parcela_atual": d.get("parcela_atual", 1), "id_compra": d.get("id_compra"), "id_compra_original": d.get("id_compra_original"), "observacao": d.get("observacao", ""), "id_fatura": d.get("id_fatura")}
                 self._compras_cartao.append(CompraCartao(**args))
-
             self._faturas = []
             for d in dados_completos.get("faturas", []):
-                args = {
-                    "id_cartao": d.get("id_cartao"), "mes": d.get("mes"), "ano": d.get("ano"),
-                    "data_fechamento": date.fromisoformat(d.get("data_fechamento")),
-                    "data_vencimento": date.fromisoformat(d.get("data_vencimento")),
-                    "valor_total": d.get("valor_total"), "id_fatura": d.get("id_fatura"),
-                    "status": d.get("status", "Fechada")
-                }
+                args = {"id_cartao": d.get("id_cartao"), "mes": d.get("mes"), "ano": d.get("ano"), "data_fechamento": date.fromisoformat(d.get("data_fechamento")), "data_vencimento": date.fromisoformat(d.get("data_vencimento")), "valor_total": d.get("valor_total"), "id_fatura": d.get("id_fatura"), "status": d.get("status", "Fechada")}
                 self._faturas.append(Fatura(**args))
-            
             self._categorias = dados_completos.get("categorias", ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"])
         except (FileNotFoundError, json.JSONDecodeError):
             self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao, self._faturas, self._categorias = [], [], [], [], [], ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"]
@@ -226,15 +205,6 @@ class GerenciadorContas:
         descricao = f"Pagamento Fatura - {cartao_associado.nome} ({fatura.data_vencimento.strftime('%b/%Y')})"
         self._apenas_registrar_transacao(id_conta_pagamento, descricao, fatura.valor_total, "Despesa", data_pagamento, "Pagamento de Fatura")
         return True
-    def obter_fatura_cartao(self, id_cartao: str, mes_referencia: int, ano_referencia: int):
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao: return [], []
-        data_fechamento = date(ano_referencia, mes_referencia, cartao.dia_fechamento)
-        data_inicio_fatura = data_fechamento - relativedelta(months=1) + timedelta(days=1)
-        compras_nao_pagas = [c for c in self._compras_cartao if c.id_cartao == id_cartao and not c.paga]
-        fatura_atual = [c for c in compras_nao_pagas if data_inicio_fatura <= c.data_compra <= data_fechamento]
-        faturas_futuras = [c for c in compras_nao_pagas if c.data_compra > data_fechamento]
-        return fatura_atual, faturas_futuras
     def fechar_fatura(self, id_cartao: str, data_fechamento_real: date, data_vencimento_real: date) -> Optional[Fatura]:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao: return None
