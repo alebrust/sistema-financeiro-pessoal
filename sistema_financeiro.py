@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 63 - CORREÇÃO DE RETROCOMPATIBILIDADE) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 64 - CORREÇÃO FINAL DE RETROCOMPATIBILIDADE) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from dateutil.relativedelta import relativedelta
 import calendar
 
-# ... (Classes Fatura, CompraCartao, CartaoCredito, Ativo, Transacao, Conta, ContaCorrente, ContaInvestimento sem mudanças) ...
+# ... (Classes Fatura, CompraCartao, CartaoCredito, Ativo, Transacao, Conta, ContaCorrente, ContaInvestimento não mudam) ...
 class Fatura:
     def __init__(self, id_cartao: str, mes: int, ano: int, data_fechamento: date, data_vencimento: date, valor_total: float, id_fatura: str = None, status: str = "Fechada"):
         self.id_fatura, self.id_cartao, self.mes, self.ano, self.data_fechamento, self.data_vencimento, self.valor_total, self.status = (id_fatura if id_fatura else str(uuid4()), id_cartao, mes, ano, data_fechamento, data_vencimento, valor_total, status)
@@ -159,15 +159,16 @@ class GerenciadorContas:
             for d in dados_completos.get("transacoes", []):
                 d["data_transacao"] = date.fromisoformat(d.pop("data"))
                 if "categoria" not in d: d["categoria"] = "Não categorizado"
-                if "observacao" not in d: d["observacao"] = "" # Retrocompatibilidade
+                if "observacao" not in d: d["observacao"] = ""
+                if "detalhes_operacao" not in d: d["detalhes_operacao"] = None
                 self._transacoes.append(Transacao(**d))
             self._cartoes_credito = [CartaoCredito(**d) for d in dados_completos.get("cartoes_credito", [])]
             self._compras_cartao = []
             for d in dados_completos.get("compras_cartao", []):
                 d["data_compra"] = date.fromisoformat(d.pop("data_compra"))
                 # --- MUDANÇA PRINCIPAL AQUI ---
-                if "observacao" not in d: d["observacao"] = "" # Garante retrocompatibilidade
-                if "id_fatura" not in d: d["id_fatura"] = None # Garante retrocompatibilidade
+                if "observacao" not in d: d["observacao"] = ""
+                if "id_fatura" not in d: d["id_fatura"] = None
                 self._compras_cartao.append(CompraCartao(**d))
             self._faturas = []
             for d in dados_completos.get("faturas", []):
