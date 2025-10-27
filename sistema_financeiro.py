@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 58 - CORREÇÃO DO ATTRIBUTEERROR 'paga') ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 59 - CORREÇÃO DO ATTRIBUTEERROR) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -8,27 +8,21 @@ from typing import List, Optional, Dict, Any
 from dateutil.relativedelta import relativedelta
 import calendar
 
+# ... (Classes Fatura, CompraCartao, CartaoCredito, Ativo, Transacao, Conta, ContaCorrente, ContaInvestimento sem mudanças) ...
 class Fatura:
-    # ... (sem mudanças)
     def __init__(self, id_cartao: str, mes: int, ano: int, data_fechamento: date, data_vencimento: date, valor_total: float, id_fatura: str = None, status: str = "Fechada"):
         self.id_fatura, self.id_cartao, self.mes, self.ano, self.data_fechamento, self.data_vencimento, self.valor_total, self.status = (id_fatura if id_fatura else str(uuid4()), id_cartao, mes, ano, data_fechamento, data_vencimento, valor_total, status)
     def para_dict(self) -> Dict[str, Any]:
         d = self.__dict__.copy(); d['data_fechamento'] = self.data_fechamento.isoformat(); d['data_vencimento'] = self.data_vencimento.isoformat(); return d
 
 class CompraCartao:
-    # MUDANÇA: Adicionado self.paga = False
-    def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, 
-                 total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None, observacao: str = "", id_fatura: str = None):
-        self.id_compra = id_compra if id_compra else str(uuid4())
-        self.id_compra_original = id_compra_original if id_compra_original else self.id_compra
-        self.id_cartao, self.descricao, self.valor, self.data_compra, self.categoria, self.total_parcelas, self.parcela_atual, self.observacao = id_cartao, descricao, valor, data_compra, categoria, total_parcelas, parcela_atual, observacao
-        self.id_fatura = id_fatura
-        self.paga = False # <-- LINHA CORRIGIDA
-
+    def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None, observacao: str = "", id_fatura: str = None):
+        self.id_compra = id_compra if id_compra else str(uuid4()); self.id_compra_original = id_compra_original if id_compra_original else self.id_compra
+        self.id_cartao, self.descricao, self.valor, self.data_compra, self.categoria, self.total_parcelas, self.parcela_atual, self.observacao, self.id_fatura = id_cartao, descricao, valor, data_compra, categoria, total_parcelas, parcela_atual, observacao, id_fatura
+        self.paga = False
     def para_dict(self) -> Dict[str, Any]:
         d = self.__dict__.copy(); d['data_compra'] = self.data_compra.isoformat(); return d
 
-# ... (O resto do arquivo sistema_financeiro.py permanece o mesmo da versão anterior)
 class CartaoCredito:
     def __init__(self, nome: str, dia_fechamento: int, dia_vencimento: int, id_cartao: str = None, logo_url: str = ""):
         if not (1 <= dia_fechamento <= 31 and 1 <= dia_vencimento <= 31): raise ValueError("Dias de fechamento e vencimento devem ser válidos.")
@@ -136,6 +130,7 @@ class GerenciadorContas:
         self._contas: List[Conta] = []; self._transacoes: List[Transacao] = []; self._cartoes_credito: List[CartaoCredito] = []; self._compras_cartao: List[CompraCartao] = []; self._categorias: List[str] = []; self._faturas: List[Fatura] = []
         self._arquivo_dados = arquivo_dados
         self.carregar_dados()
+    
     @property
     def contas(self) -> List[Conta]: return self._contas
     @property
@@ -148,8 +143,15 @@ class GerenciadorContas:
     def categorias(self) -> List[str]: return self._categorias
     @property
     def faturas(self) -> List[Fatura]: return self._faturas
+
     def buscar_fatura_por_id(self, id_fatura: str) -> Optional[Fatura]:
         return next((f for f in self._faturas if f.id_fatura == id_fatura), None)
+
+    # --- MÉTODO FALTANTE ADICIONADO AQUI ---
+    def obter_compras_fatura_aberta(self, id_cartao: str):
+        """Retorna todas as compras ainda não associadas a nenhuma fatura fechada."""
+        return [c for c in self._compras_cartao if c.id_cartao == id_cartao and c.id_fatura is None]
+
     def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
         fatura = self.buscar_fatura_por_id(id_fatura)
         conta_pagamento = self.buscar_conta_por_id(id_conta_pagamento)
@@ -162,15 +164,6 @@ class GerenciadorContas:
         descricao = f"Pagamento Fatura - {cartao_associado.nome} ({fatura.data_vencimento.strftime('%b/%Y')})"
         self.registrar_transacao(id_conta_pagamento, descricao, fatura.valor_total, "Despesa", data_pagamento, "Pagamento de Fatura")
         return True
-    def obter_fatura_cartao(self, id_cartao: str, mes_referencia: int, ano_referencia: int):
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao: return [], []
-        data_fechamento = date(ano_referencia, mes_referencia, cartao.dia_fechamento)
-        data_inicio_fatura = data_fechamento - relativedelta(months=1) + timedelta(days=1)
-        compras_nao_pagas = [c for c in self._compras_cartao if c.id_cartao == id_cartao and not c.paga]
-        fatura_atual = [c for c in compras_nao_pagas if data_inicio_fatura <= c.data_compra <= data_fechamento]
-        faturas_futuras = [c for c in compras_nao_pagas if c.data_compra > data_fechamento]
-        return fatura_atual, faturas_futuras
     def fechar_fatura(self, id_cartao: str, data_fechamento_real: date, data_vencimento_real: date) -> Optional[Fatura]:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao: return None
