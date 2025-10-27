@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 61 - CORREÇÃO FINAL DO GERENCIADOR) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 62 - CORREÇÃO FINAL DO REGISTRO DE COMPRA) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -147,37 +147,7 @@ class GerenciadorContas:
     def buscar_fatura_por_id(self, id_fatura: str) -> Optional[Fatura]:
         return next((f for f in self._faturas if f.id_fatura == id_fatura), None)
 
-    # --- MÉTODOS RESTAURADOS E CORRIGIDOS ---
-    def adicionar_cartao_credito(self, cartao: CartaoCredito):
-        if isinstance(cartao, CartaoCredito):
-            self._cartoes_credito.append(cartao)
-
-    def remover_cartao_credito(self, id_cartao: str) -> bool:
-        cartao_para_remover = self.buscar_cartao_por_id(id_cartao)
-        if not cartao_para_remover: return False
-        self._cartoes_credito.remove(cartao_para_remover)
-        self._compras_cartao = [c for c in self._compras_cartao if c.id_cartao != id_cartao]
-        self._faturas = [f for f in self._faturas if f.id_cartao != id_cartao]
-        return True
-
-    def adicionar_categoria(self, categoria: str):
-        if isinstance(categoria, str) and categoria.strip() and categoria not in self._categorias:
-            self._categorias.append(categoria)
-            self._categorias.sort()
-
-    def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
-        fatura = self.buscar_fatura_por_id(id_fatura)
-        conta_pagamento = self.buscar_conta_por_id(id_conta_pagamento)
-        if not fatura or not isinstance(conta_pagamento, ContaCorrente) or fatura.status == "Paga": return False
-        if not conta_pagamento.sacar(fatura.valor_total): return False
-        fatura.status = "Paga"
-        for compra in self._compras_cartao:
-            if compra.id_fatura == id_fatura: compra.paga = True
-        cartao_associado = self.buscar_cartao_por_id(fatura.id_cartao)
-        descricao = f"Pagamento Fatura - {cartao_associado.nome} ({fatura.data_vencimento.strftime('%b/%Y')})"
-        self._apenas_registrar_transacao(id_conta_pagamento, descricao, fatura.valor_total, "Despesa", data_pagamento, "Pagamento de Fatura")
-        return True
-
+    # --- MÉTODO CORRIGIDO ---
     def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = ""):
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao: return False
@@ -192,13 +162,33 @@ class GerenciadorContas:
             data_fatura_parcela = data_primeira_fatura + relativedelta(months=i)
             ultimo_dia_mes = calendar.monthrange(data_fatura_parcela.year, data_fatura_parcela.month)[1]
             dia_vencimento_real = min(cartao.dia_vencimento, ultimo_dia_mes)
-            data_vencimento_final = date(data_fatura_parcela.year, data_fatura_parcela.month, dia_vencimento_real)
+            data_efetiva_parcela = date(data_fatura_parcela.year, data_fatura_parcela.month, dia_vencimento_real)
+            
             desc_parcela = f"{descricao} ({i+1}/{num_parcelas})" if num_parcelas > 1 else descricao
-            nova_compra = CompraCartao(id_cartao=id_cartao, descricao=desc_parcela, valor=valor_parcela, data_compra=data_compra, categoria=categoria, total_parcelas=num_parcelas, parcela_atual=i + 1, id_compra_original=id_compra_original, observacao=observacao)
+            
+            # Agora passamos a 'observacao' para o construtor
+            nova_compra = CompraCartao(
+                id_cartao=id_cartao, descricao=desc_parcela, valor=valor_parcela, 
+                data_compra=data_compra, # Usamos a data da compra original para referência
+                categoria=categoria, total_parcelas=num_parcelas, parcela_atual=i + 1, 
+                id_compra_original=id_compra_original, observacao=observacao
+            )
             self._compras_cartao.append(nova_compra)
         return True
 
-    # ... (resto do Gerenciador)
+    # ... (resto do Gerenciador sem mudanças)
+    def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
+        fatura = self.buscar_fatura_por_id(id_fatura)
+        conta_pagamento = self.buscar_conta_por_id(id_conta_pagamento)
+        if not fatura or not isinstance(conta_pagamento, ContaCorrente) or fatura.status == "Paga": return False
+        if not conta_pagamento.sacar(fatura.valor_total): return False
+        fatura.status = "Paga"
+        for compra in self._compras_cartao:
+            if compra.id_fatura == id_fatura: compra.paga = True
+        cartao_associado = self.buscar_cartao_por_id(fatura.id_cartao)
+        descricao = f"Pagamento Fatura - {cartao_associado.nome} ({fatura.data_vencimento.strftime('%b/%Y')})"
+        self._apenas_registrar_transacao(id_conta_pagamento, descricao, fatura.valor_total, "Despesa", data_pagamento, "Pagamento de Fatura")
+        return True
     def obter_fatura_cartao(self, id_cartao: str, mes_referencia: int, ano_referencia: int):
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao: return [], []
@@ -220,9 +210,20 @@ class GerenciadorContas:
         for compra in compras_para_fechar: compra.id_fatura = nova_fatura.id_fatura
         self._faturas.append(nova_fatura)
         return nova_fatura
+    def adicionar_categoria(self, categoria: str):
+        if isinstance(categoria, str) and categoria.strip() and categoria not in self._categorias:
+            self._categorias.append(categoria)
+            self._categorias.sort()
     def remover_categoria(self, categoria: str):
         if categoria in self._categorias: self._categorias.remove(categoria)
     def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]: return next((c for c in self._cartoes_credito if c.id_cartao == id_cartao), None)
+    def remover_cartao_credito(self, id_cartao: str) -> bool:
+        cartao_para_remover = self.buscar_cartao_por_id(id_cartao)
+        if not cartao_para_remover: return False
+        self._cartoes_credito.remove(cartao_para_remover)
+        self._compras_cartao = [c for c in self._compras_cartao if c.id_cartao != id_cartao]
+        self._faturas = [f for f in self._faturas if f.id_cartao != id_cartao]
+        return True
     def remover_compra_cartao(self, id_compra_original: str) -> bool:
         compras_para_remover = [c for c in self._compras_cartao if c.id_compra_original == id_compra_original]
         if not compras_para_remover: return False
