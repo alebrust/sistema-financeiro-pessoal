@@ -1,4 +1,4 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 70 - CORREÇÃO DO PARCELAMENTO) ---
+# --- ARQUIVO: sistema_financeiro.py (VERSÃO 71 - CORREÇÃO FINAL DE CARREGAMENTO DE ATIVOS) ---
 
 import json
 from abc import ABC, abstractmethod
@@ -147,45 +147,6 @@ class GerenciadorContas:
     def obter_compras_fatura_aberta(self, id_cartao: str):
         return [c for c in self._compras_cartao if c.id_cartao == id_cartao and c.id_fatura is None]
 
-    def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = ""):
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao: return False
-        
-        valor_parcela = round(valor_total / num_parcelas, 2)
-        id_compra_original = str(uuid4())
-        
-        # --- LÓGICA DE PARCELAMENTO CORRIGIDA ---
-        # 1. Determina a data de fechamento da fatura para a compra original
-        data_fechamento_compra = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
-        
-        # 2. Se a compra foi feita no dia do fechamento ou depois, a primeira parcela cai no mês seguinte
-        if data_compra >= data_fechamento_compra:
-            data_primeira_parcela = data_compra + relativedelta(months=1)
-        else:
-            data_primeira_parcela = data_compra
-
-        for i in range(num_parcelas):
-            # 3. Calcula a data efetiva de cada parcela, adicionando meses à data da primeira
-            data_efetiva_parcela = data_primeira_parcela + relativedelta(months=i)
-            
-            desc_parcela = f"{descricao} ({i+1}/{num_parcelas})" if num_parcelas > 1 else descricao
-            
-            # 4. Cria a compra usando a data efetiva da parcela, não a data da compra original
-            nova_compra = CompraCartao(
-                id_cartao=id_cartao, 
-                descricao=desc_parcela, 
-                valor=valor_parcela, 
-                data_compra=data_efetiva_parcela, # <-- MUDANÇA PRINCIPAL AQUI
-                categoria=categoria, 
-                total_parcelas=num_parcelas, 
-                parcela_atual=i + 1, 
-                id_compra_original=id_compra_original, 
-                observacao=observacao
-            )
-            self._compras_cartao.append(nova_compra)
-        return True
-
-    # ... (O resto do GerenciadorContas permanece o mesmo da versão anterior)
     def carregar_dados(self):
         try:
             with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
@@ -194,8 +155,17 @@ class GerenciadorContas:
                 tipo_classe = d.pop("tipo_classe")
                 if tipo_classe == "ContaCorrente": self._contas.append(ContaCorrente(**d))
                 elif tipo_classe == "ContaInvestimento":
-                    ativos_data = d.pop("ativos", []); conta_invest = ContaInvestimento(**d)
-                    for ativo_d in ativos_data: conta_invest.adicionar_ativo(Ativo(**ativo_d))
+                    ativos_data = d.pop("ativos", [])
+                    conta_invest = ContaInvestimento(**d)
+                    # --- MUDANÇA PRINCIPAL AQUI ---
+                    for ativo_d in ativos_data:
+                        # O método 'atualizar_ou_adicionar_ativo' espera os argumentos, não um objeto.
+                        conta_invest.atualizar_ou_adicionar_ativo(
+                            ticker=ativo_d.get('ticker'),
+                            quantidade_compra=ativo_d.get('quantidade'),
+                            preco_compra=ativo_d.get('preco_medio'),
+                            tipo_ativo=ativo_d.get('tipo_ativo')
+                        )
                     self._contas.append(conta_invest)
             self._transacoes = []
             for d in dados_completos.get("transacoes", []):
@@ -213,6 +183,24 @@ class GerenciadorContas:
             self._categorias = dados_completos.get("categorias", ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"])
         except (FileNotFoundError, json.JSONDecodeError):
             self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao, self._faturas, self._categorias = [], [], [], [], [], ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"]
+
+    # ... (O resto do GerenciadorContas permanece o mesmo da versão anterior)
+    def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = ""):
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao: return False
+        valor_parcela = round(valor_total / num_parcelas, 2)
+        id_compra_original = str(uuid4())
+        data_fechamento_compra = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
+        if data_compra >= data_fechamento_compra:
+            data_primeira_parcela = data_compra + relativedelta(months=1)
+        else:
+            data_primeira_parcela = data_compra
+        for i in range(num_parcelas):
+            data_efetiva_parcela = data_primeira_parcela + relativedelta(months=i)
+            desc_parcela = f"{descricao} ({i+1}/{num_parcelas})" if num_parcelas > 1 else descricao
+            nova_compra = CompraCartao(id_cartao=id_cartao, descricao=desc_parcela, valor=valor_parcela, data_compra=data_efetiva_parcela, categoria=categoria, total_parcelas=num_parcelas, parcela_atual=i + 1, id_compra_original=id_compra_original, observacao=observacao)
+            self._compras_cartao.append(nova_compra)
+        return True
     def buscar_fatura_por_id(self, id_fatura: str) -> Optional[Fatura]:
         return next((f for f in self._faturas if f.id_fatura == id_fatura), None)
     def adicionar_cartao_credito(self, cartao: CartaoCredito):
