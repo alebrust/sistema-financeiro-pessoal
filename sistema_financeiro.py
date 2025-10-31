@@ -184,22 +184,59 @@ class GerenciadorContas:
         except (FileNotFoundError, json.JSONDecodeError):
             self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao, self._faturas, self._categorias = [], [], [], [], [], ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"]
 
-    # ... (O resto do GerenciadorContas permanece o mesmo da versão anterior)
-    def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = ""):
+       def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = "") -> bool:
         cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao: return False
+        if not cartao:
+            return False
+
         valor_parcela = round(valor_total / num_parcelas, 2)
         id_compra_original = str(uuid4())
-        data_fechamento_compra = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
-        if data_compra >= data_fechamento_compra:
-            data_primeira_parcela = data_compra + relativedelta(months=1)
+
+        # --- INÍCIO DA NOVA LÓGICA CORRIGIDA ---
+
+        # 1. Determina a data de fechamento para o mês em que a compra foi realizada.
+        #    Isso define em qual ciclo de fatura a compra se encaixa.
+        try:
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
+        except ValueError:
+            # Trata casos de meses com menos dias que o dia do fechamento (ex: fechar dia 31 em Fev)
+            ultimo_dia_mes = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo_dia_mes)
+
+        # 2. Determina a data de vencimento da PRIMEIRA parcela.
+        if data_compra <= data_fechamento_ciclo:
+            # Se a compra foi ANTES ou NO DIA do fechamento, ela entra na próxima fatura.
+            # Ex: Compra em 18/10, Fechamento 28/10 -> Vencimento em 10/11.
+            vencimento_primeira_parcela = date(data_compra.year, data_compra.month, cartao.dia_vencimento) + relativedelta(months=1)
         else:
-            data_primeira_parcela = data_compra
+            # Se a compra foi DEPOIS do fechamento, ela "pula" para a fatura seguinte.
+            # Ex: Compra em 29/10, Fechamento 28/10 -> Vencimento em 10/12.
+            vencimento_primeira_parcela = date(data_compra.year, data_compra.month, cartao.dia_vencimento) + relativedelta(months=2)
+
+        # 3. Itera para criar cada parcela com sua respectiva data de vencimento.
         for i in range(num_parcelas):
-            data_efetiva_parcela = data_primeira_parcela + relativedelta(months=i)
+            # A data de vencimento de cada parcela subsequente é um mês após a anterior.
+            data_vencimento_parcela = vencimento_primeira_parcela + relativedelta(months=i)
+            
             desc_parcela = f"{descricao} ({i+1}/{num_parcelas})" if num_parcelas > 1 else descricao
-            nova_compra = CompraCartao(id_cartao=id_cartao, descricao=desc_parcela, valor=valor_parcela, data_compra=data_efetiva_parcela, categoria=categoria, total_parcelas=num_parcelas, parcela_atual=i + 1, id_compra_original=id_compra_original, observacao=observacao)
+            
+            # ATENÇÃO: O campo 'data_compra' no objeto CompraCartao será usado para armazenar a DATA DE VENCIMENTO da parcela.
+            # Isso é crucial para que a lógica de fechamento de fatura funcione corretamente.
+            nova_compra = CompraCartao(
+                id_cartao=id_cartao,
+                descricao=desc_parcela,
+                valor=valor_parcela,
+                data_compra=data_vencimento_parcela, # Usando a data de VENCIMENTO calculada!
+                categoria=categoria,
+                total_parcelas=num_parcelas,
+                parcela_atual=i + 1,
+                id_compra_original=id_compra_original,
+                observacao=observacao
+            )
             self._compras_cartao.append(nova_compra)
+        
+        # --- FIM DA NOVA LÓGICA ---
+        
         return True
     def buscar_fatura_por_id(self, id_fatura: str) -> Optional[Fatura]:
         return next((f for f in self._faturas if f.id_fatura == id_fatura), None)
