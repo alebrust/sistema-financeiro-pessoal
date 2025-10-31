@@ -14,7 +14,7 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 if 'gerenciador' not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
 
-# Inicialização dos estados da sessão
+# Inicialização de todos os estados de sessão necessários
 if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_para_excluir = None
 if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
 if 'compra_para_excluir' not in st.session_state: st.session_state.compra_para_excluir = None
@@ -58,6 +58,7 @@ with tab_dashboard:
                                 st.rerun()
                             else:
                                 st.error("Falha na compra. Verifique o saldo em caixa da corretora.")
+
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)]
             if not contas_correntes:
@@ -103,6 +104,7 @@ with tab_dashboard:
             st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
         else:
             st.metric(label="**Patrimônio Total**", value="R$ 0,00")
+
     with col1:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
@@ -207,6 +209,7 @@ with tab_contas:
                         st.session_state.gerenciador.salvar_dados()
                         st.success(f"Conta '{nome_conta}' adicionada!")
                         st.rerun()
+
     with col_contas1:
         st.subheader("Contas Existentes")
         todas_as_contas = st.session_state.gerenciador.contas
@@ -330,6 +333,7 @@ with tab_cartoes:
                             st.rerun()
                         else:
                             st.error("Falha ao registrar a compra.")
+    
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
         cartoes = st.session_state.gerenciador.cartoes_credito
@@ -338,11 +342,13 @@ with tab_cartoes:
         else:
             for cartao in cartoes:
                 logo_col, expander_col = st.columns([1, 5])
+                
                 with logo_col:
                     if cartao.logo_url:
                         st.image(cartao.logo_url, width=65)
                     else:
                         st.write("💳")
+                
                 with expander_col:
                     compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
                     valor_fatura_aberta = sum(c.valor for c in compras_abertas)
@@ -400,7 +406,7 @@ with tab_cartoes:
                                     cor = "green" if fatura.status == "Paga" else "red"
                                     fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
                                     fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
-
+                                    
                                     with st.expander("Ver Lançamentos"):
                                         lancamentos_fatura = [c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura]
                                         if not lancamentos_fatura:
@@ -437,12 +443,13 @@ with tab_cartoes:
                                             st.session_state.fatura_para_pagar = None
                                             st.rerun()
                                     st.divider()
-                        
+
                         st.divider()
                         if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
                             st.session_state.cartao_para_excluir = cartao.id_cartao
                             st.rerun()
-
+                
+                # Bloco de confirmação de exclusão do cartão
                 if st.session_state.cartao_para_excluir == cartao.id_cartao:
                     st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
                     col_confirm, col_cancel, _ = st.columns([1, 1, 3])
