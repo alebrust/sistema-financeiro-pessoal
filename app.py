@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 67 - EXCLUSÃO DE CARTÃO E DETALHE DE FATURA FECHADA) ---
+# --- ARQUIVO: app.py (VERSÃO 68 - CORREÇÃO DE INDENTAÇÃO) ---
 
 import streamlit as st
 import pandas as pd
@@ -19,7 +19,7 @@ if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_
 if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
 if 'compra_para_excluir' not in st.session_state: st.session_state.compra_para_excluir = None
 if 'fatura_para_pagar' not in st.session_state: st.session_state.fatura_para_pagar = None
-if 'cartao_para_excluir' not in st.session_state: st.session_state.cartao_para_excluir = None # <--- NOVO
+if 'cartao_para_excluir' not in st.session_state: st.session_state.cartao_para_excluir = None
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
@@ -237,7 +237,6 @@ with tab_cartoes:
                 with expander_col:
                     compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
                     valor_fatura_aberta = sum(c.valor for c in compras_abertas)
-                    
                     faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
 
                     with st.expander(f"{cartao.nome} - Fatura Aberta: {formatar_moeda(valor_fatura_aberta)}"):
@@ -280,7 +279,6 @@ with tab_cartoes:
                                 fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
                                 fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
 
-                                # <--- NOVO: Início do expander para ver lançamentos da fatura fechada
                                 with st.expander("Ver Lançamentos"):
                                     lancamentos_fatura = [c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura]
                                     if not lancamentos_fatura:
@@ -288,13 +286,13 @@ with tab_cartoes:
                                     else:
                                         for lancamento in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
                                             st.text(f"• {lancamento.descricao}: {formatar_moeda(lancamento.valor)}")
-                                # <--- NOVO: Fim do expander
 
                                 if fatura.status == "Fechada":
                                     with fatura_col2:
                                         if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
                                             st.session_state.fatura_para_pagar = fatura.id_fatura; st.rerun()
-                                else: fatura_col2.success("Paga")
+                                else:
+                                    fatura_col2.success("Paga")
                                 if st.session_state.fatura_para_pagar == fatura.id_fatura:
                                     with st.form(f"pay_bill_form_{fatura.id_fatura}"):
                                         st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%B/%Y')}?")
@@ -310,12 +308,13 @@ with tab_cartoes:
                                         st.session_state.fatura_para_pagar = None; st.rerun()
                                 st.divider()
                         
-                        # <--- NOVO: Início do bloco de exclusão do cartão
                         st.divider()
                         if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
                             st.session_state.cartao_para_excluir = cartao.id_cartao
                             st.rerun()
                 
+                # --- CORREÇÃO DE INDENTAÇÃO APLICADA AQUI ---
+                # Este bloco agora está fora do `with expander_col`, alinhado corretamente.
                 if st.session_state.cartao_para_excluir == cartao.id_cartao:
                     st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
                     col_confirm, col_cancel, _ = st.columns([1, 1, 3])
@@ -330,7 +329,6 @@ with tab_cartoes:
                         if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
-                # <--- NOVO: Fim do bloco de exclusão do cartão
 
 # --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
