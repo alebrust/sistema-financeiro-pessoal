@@ -1,4 +1,4 @@
-# --- ARQUIVO: app.py (VERSÃO 66 - CORREÇÃO DA EXIBIÇÃO DA FATURA ABERTA) ---
+# --- ARQUIVO: app.py (VERSÃO 67 - EXCLUSÃO DE CARTÃO E DETALHE DE FATURA FECHADA) ---
 
 import streamlit as st
 import pandas as pd
@@ -14,11 +14,12 @@ st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout
 if 'gerenciador' not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
 
+# Inicialização dos estados da sessão
 if 'transacao_para_excluir' not in st.session_state: st.session_state.transacao_para_excluir = None
 if 'conta_para_excluir' not in st.session_state: st.session_state.conta_para_excluir = None
 if 'compra_para_excluir' not in st.session_state: st.session_state.compra_para_excluir = None
 if 'fatura_para_pagar' not in st.session_state: st.session_state.fatura_para_pagar = None
-if 'cartao_para_excluir' not in st.session_state: st.session_state.cartao_para_excluir = None
+if 'cartao_para_excluir' not in st.session_state: st.session_state.cartao_para_excluir = None # <--- NOVO
 
 st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
@@ -26,7 +27,6 @@ tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(["�
 
 # --- ABA 1: DASHBOARD ---
 with tab_dashboard:
-    # ... (código do Dashboard sem mudanças)
     col1, col2 = st.columns([1, 1])
     with col2:
         st.header("Ações Rápidas")
@@ -99,7 +99,6 @@ with tab_dashboard:
 
 # --- ABA 2: HISTÓRICO DE TRANSAÇÕES ---
 with tab_transacoes:
-    # ... (código do histórico sem mudanças)
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
     if not transacoes: st.info("Nenhuma transação registrada ainda.")
@@ -137,7 +136,6 @@ with tab_transacoes:
 
 # --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
-    # ... (código da aba Contas sem mudanças)
     st.header("Gerenciar Contas"); col_contas1, col_contas2 = st.columns(2)
     with col_contas2:
         with st.form("add_account_form", clear_on_submit=True):
@@ -203,7 +201,6 @@ with tab_cartoes:
     st.header("Gerenciar Cartões de Crédito")
     col_cartoes1, col_cartoes2 = st.columns(2)
     with col_cartoes2:
-        # ... (Formulários de adicionar cartão e lançar compra sem mudanças)
         with st.form("add_card_form", clear_on_submit=True):
             st.subheader("Adicionar Novo Cartão"); nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)"); logo_url_cartao = st.text_input("URL do Logo (Opcional)"); dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=20); dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=28)
             if st.form_submit_button("Adicionar Cartão", use_container_width=True):
@@ -238,8 +235,6 @@ with tab_cartoes:
                     if cartao.logo_url: st.image(cartao.logo_url, width=65)
                     else: st.write("💳")
                 with expander_col:
-                    # --- MUDANÇA PRINCIPAL AQUI ---
-                    # 1. Usamos o método correto e consistente
                     compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
                     valor_fatura_aberta = sum(c.valor for c in compras_abertas)
                     
@@ -253,7 +248,6 @@ with tab_cartoes:
                             if not compras_abertas:
                                 st.info("Nenhum lançamento em aberto para este cartão.")
                             else:
-                                # ... (código de exibição e exclusão de compras sem mudanças)
                                 for compra in sorted(compras_abertas, key=lambda x: x.data_compra):
                                     c1, c2 = st.columns([4, 1]); desc = f"{compra.data_compra.strftime('%d/%m/%Y')} - {compra.descricao}: {formatar_moeda(compra.valor)}"; c1.text(desc)
                                     with c2:
@@ -279,13 +273,23 @@ with tab_cartoes:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
 
                         with tab_fechadas:
-                            # ... (código da aba de faturas fechadas sem mudanças)
                             if not faturas_fechadas: st.info("Nenhuma fatura fechada para este cartão.")
                             for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
                                 fatura_col1, fatura_col2 = st.columns([3, 1])
                                 cor = "green" if fatura.status == "Paga" else "red"
                                 fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
                                 fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
+
+                                # <--- NOVO: Início do expander para ver lançamentos da fatura fechada
+                                with st.expander("Ver Lançamentos"):
+                                    lancamentos_fatura = [c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura]
+                                    if not lancamentos_fatura:
+                                        st.caption("Nenhum lançamento encontrado para esta fatura.")
+                                    else:
+                                        for lancamento in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
+                                            st.text(f"• {lancamento.descricao}: {formatar_moeda(lancamento.valor)}")
+                                # <--- NOVO: Fim do expander
+
                                 if fatura.status == "Fechada":
                                     with fatura_col2:
                                         if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
@@ -305,10 +309,31 @@ with tab_cartoes:
                                     if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
                                         st.session_state.fatura_para_pagar = None; st.rerun()
                                 st.divider()
+                        
+                        # <--- NOVO: Início do bloco de exclusão do cartão
+                        st.divider()
+                        if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
+                            st.session_state.cartao_para_excluir = cartao.id_cartao
+                            st.rerun()
+                
+                if st.session_state.cartao_para_excluir == cartao.id_cartao:
+                    st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+                    with col_confirm:
+                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_card_{cartao.id_cartao}", type="primary"):
+                            if st.session_state.gerenciador.remover_cartao_credito(cartao.id_cartao):
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Cartão '{cartao.nome}' removido!")
+                                st.session_state.cartao_para_excluir = None
+                                st.rerun()
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
+                            st.session_state.cartao_para_excluir = None
+                            st.rerun()
+                # <--- NOVO: Fim do bloco de exclusão do cartão
 
 # --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
-    # ... (código da aba Configurações sem mudanças)
     st.header("⚙️ Configurações Gerais"); st.subheader("Gerenciar Categorias"); col_cat1, col_cat2 = st.columns(2)
     with col_cat1:
         st.write("Categorias existentes:"); categorias = st.session_state.gerenciador.categorias
