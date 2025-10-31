@@ -8,10 +8,6 @@ from typing import List, Optional, Dict, Any
 from dateutil.relativedelta import relativedelta
 
 
-# =========================
-# Utilidades
-# =========================
-
 def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
     if isinstance(value, date):
         return value
@@ -24,10 +20,6 @@ def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
             pass
     return default if default is not None else date.today()
 
-
-# =========================
-# Entidades
-# =========================
 
 class Transacao:
     def __init__(
@@ -45,6 +37,7 @@ class Transacao:
         self.id_conta = id_conta
         self.descricao = descricao
         self.valor = float(valor)
+        self.tipo = tipo
         self.data = data_transacao
         self.categoria = categoria
         self.observacao = observacao
@@ -238,7 +231,7 @@ class CompraCartao:
         id_cartao: str,
         descricao: str,
         valor: float,
-        data_compra: date,
+        data_compra: date,  # neste sistema, é a data de vencimento da parcela
         categoria: str,
         total_parcelas: int = 1,
         parcela_atual: int = 1,
@@ -246,19 +239,20 @@ class CompraCartao:
         observacao: str = "",
         id_compra: Optional[str] = None,
         id_fatura: Optional[str] = None,
+        data_compra_real: Optional[date] = None,  # NOVO: data real da compra
     ):
         self.id_compra = id_compra or str(uuid4())
         self.id_cartao = id_cartao
         self.descricao = descricao
         self.valor = float(valor)
-        # IMPORTANTE: neste sistema, data_compra representa a DATA DE VENCIMENTO da parcela
         self.data_compra = data_compra
         self.categoria = categoria
         self.total_parcelas = int(total_parcelas)
         self.parcela_atual = int(parcela_atual)
         self.id_compra_original = id_compra_original or self.id_compra
         self.observacao = observacao
-        self.id_fatura = id_fatura  # preenchido ao fechar fatura
+        self.id_fatura = id_fatura
+        self.data_compra_real = data_compra_real or self.data_compra
 
     def para_dict(self) -> Dict[str, Any]:
         return {
@@ -266,13 +260,14 @@ class CompraCartao:
             "id_cartao": self.id_cartao,
             "descricao": self.descricao,
             "valor": self.valor,
-            "data_compra": self.data_compra.isoformat(),
+            "data_compra": self.data_compra.isoformat(),          # vencimento
             "categoria": self.categoria,
             "total_parcelas": self.total_parcelas,
             "parcela_atual": self.parcela_atual,
             "id_compra_original": self.id_compra_original,
             "observacao": self.observacao,
             "id_fatura": self.id_fatura,
+            "data_compra_real": self.data_compra_real.isoformat(),  # NOVO
         }
 
 
@@ -291,7 +286,7 @@ class Fatura:
         self.data_fechamento = data_fechamento
         self.data_vencimento = data_vencimento
         self.valor_total = float(valor_total)
-        self.status = status  # "Fechada" | "Paga"
+        self.status = status
 
     def para_dict(self) -> Dict[str, Any]:
         return {
@@ -303,10 +298,6 @@ class Fatura:
             "status": self.status,
         }
 
-
-# =========================
-# Gerenciador
-# =========================
 
 class GerenciadorContas:
     def __init__(self, caminho_arquivo: str = "dados.json"):
@@ -329,8 +320,6 @@ class GerenciadorContas:
         ]
         self.carregar_dados()
 
-    # ---------- Persistência ----------
-
     def salvar_dados(self) -> None:
         data = {
             "contas": [c.para_dict() for c in self.contas],
@@ -352,7 +341,6 @@ class GerenciadorContas:
         except Exception:
             return
 
-        # Contas
         self.contas = []
         for c in data.get("contas", []):
             tipo = c.get("tipo", "ContaCorrente")
@@ -384,7 +372,6 @@ class GerenciadorContas:
                 )
             self.contas.append(conta)
 
-        # Transações
         self.transacoes = []
         for t in data.get("transacoes", []):
             self.transacoes.append(
@@ -400,7 +387,6 @@ class GerenciadorContas:
                 )
             )
 
-        # Cartões
         self.cartoes_credito = []
         for cc in data.get("cartoes_credito", []):
             self.cartoes_credito.append(
@@ -413,26 +399,27 @@ class GerenciadorContas:
                 )
             )
 
-        # Compras Cartão
         self.compras_cartao = []
         for c in data.get("compras_cartao", []):
+            data_venc = parse_date_safe(c.get("data_compra"), date.today())
+            data_real = parse_date_safe(c.get("data_compra_real"), data_venc)
             self.compras_cartao.append(
                 CompraCartao(
                     id_compra=c.get("id_compra"),
                     id_cartao=c.get("id_cartao", ""),
                     descricao=c.get("descricao", ""),
                     valor=float(c.get("valor", 0.0)),
-                    data_compra=parse_date_safe(c.get("data_compra"), date.today()),
+                    data_compra=data_venc,  # vencimento
                     categoria=c.get("categoria", "Outros"),
                     total_parcelas=int(c.get("total_parcelas", 1)),
                     parcela_atual=int(c.get("parcela_atual", 1)),
                     id_compra_original=c.get("id_compra_original"),
                     observacao=c.get("observacao", ""),
                     id_fatura=c.get("id_fatura"),
+                    data_compra_real=data_real,  # NOVO
                 )
             )
 
-        # Faturas
         self.faturas = []
         for f in data.get("faturas", []):
             self.faturas.append(
@@ -446,12 +433,9 @@ class GerenciadorContas:
                 )
             )
 
-        # Categorias
         cats = data.get("categorias")
         if isinstance(cats, list) and cats:
             self.categorias = cats
-
-    # ---------- Contas ----------
 
     def adicionar_conta(self, conta: Conta) -> None:
         self.contas.append(conta)
@@ -460,15 +444,12 @@ class GerenciadorContas:
         conta = next((c for c in self.contas if c.id_conta == id_conta), None)
         if not conta:
             return False
-        # Remover transações ligadas
         self.transacoes = [t for t in self.transacoes if t.id_conta != id_conta]
         self.contas = [c for c in self.contas if c.id_conta != id_conta]
         return True
 
     def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
         return next((c for c in self.contas if c.id_conta == id_conta), None)
-
-    # ---------- Transações e Transferências ----------
 
     def registrar_transacao(
         self,
@@ -498,9 +479,6 @@ class GerenciadorContas:
                 if conta.saldo_caixa < float(valor):
                     return False
                 conta.saldo_caixa -= float(valor)
-        else:
-            # Outros tipos, ex: Transferência, não devem vir por aqui
-            pass
 
         self.transacoes.append(
             Transacao(
@@ -524,7 +502,6 @@ class GerenciadorContas:
         if not conta_origem or not conta_destino:
             return False
 
-        # Debita origem
         if isinstance(conta_origem, ContaCorrente):
             if conta_origem.saldo + conta_origem.limite_cheque_especial < valor:
                 return False
@@ -534,7 +511,6 @@ class GerenciadorContas:
                 return False
             conta_origem.saldo_caixa -= valor
 
-        # Credita destino
         if isinstance(conta_destino, ContaCorrente):
             conta_destino.saldo += valor
         elif isinstance(conta_destino, ContaInvestimento):
@@ -581,8 +557,6 @@ class GerenciadorContas:
         self.transacoes = [x for x in self.transacoes if x.id_transacao != id_transacao]
         return True
 
-    # ---------- Investimentos ----------
-
     def comprar_ativo(
         self,
         id_conta_destino: str,
@@ -617,8 +591,6 @@ class GerenciadorContas:
         )
         return True
 
-    # ---------- Cartões de Crédito e Faturas ----------
-
     def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]:
         return next((c for c in self.cartoes_credito if c.id_cartao == id_cartao), None)
 
@@ -629,14 +601,12 @@ class GerenciadorContas:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return False
-        # Remove compras e faturas associadas
         self.compras_cartao = [c for c in self.compras_cartao if c.id_cartao != id_cartao]
         self.faturas = [f for f in self.faturas if f.id_cartao != id_cartao]
         self.cartoes_credito = [c for c in self.cartoes_credito if c.id_cartao != id_cartao]
         return True
 
     def obter_compras_fatura_aberta(self, id_cartao: str) -> List[CompraCartao]:
-        # Lançamentos ainda não ligados a fatura (id_fatura None)
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -647,7 +617,7 @@ class GerenciadorContas:
         id_cartao: str,
         descricao: str,
         valor_total: float,
-        data_compra: date,
+        data_compra: date,  # data real da compra (vinda do formulário)
         categoria: str,
         num_parcelas: int = 1,
         observacao: str = "",
@@ -659,14 +629,12 @@ class GerenciadorContas:
         valor_parcela = round(float(valor_total) / int(num_parcelas), 2)
         id_compra_original = str(uuid4())
 
-        # 1) Data de fechamento no mês da compra (ajusta meses curtos)
         try:
             data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
         except ValueError:
             ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
             data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
 
-        # 2) Determinar vencimento da primeira parcela
         try:
             base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
         except ValueError:
@@ -678,7 +646,6 @@ class GerenciadorContas:
         else:
             vencimento_primeira = base_venc + relativedelta(months=2)
 
-        # 3) Criar parcelas com data_compra = data de vencimento
         for i in range(num_parcelas):
             data_venc_parcela = vencimento_primeira + relativedelta(months=i)
             desc_parcela = f"{descricao} ({i + 1}/{num_parcelas})" if num_parcelas > 1 else descricao
@@ -686,19 +653,19 @@ class GerenciadorContas:
                 id_cartao=id_cartao,
                 descricao=desc_parcela,
                 valor=valor_parcela,
-                data_compra=data_venc_parcela,
+                data_compra=data_venc_parcela,      # vencimento
                 categoria=categoria,
                 total_parcelas=num_parcelas,
                 parcela_atual=i + 1,
                 id_compra_original=id_compra_original,
                 observacao=observacao,
+                data_compra_real=data_compra,        # data real da compra
             )
             self.compras_cartao.append(nova)
 
         return True
 
     def remover_compra_cartao(self, id_compra_original: str) -> None:
-        # Remove todas as parcelas de uma compra original (sem tocar faturas pagas)
         self.compras_cartao = [
             c for c in self.compras_cartao if c.id_compra_original != id_compra_original
         ]
@@ -713,7 +680,6 @@ class GerenciadorContas:
         if not cartao:
             return None
 
-        # Como data_compra armazena vencimento, basta selecionar pelo mês/ano do vencimento
         ano = data_vencimento_real.year
         mes = data_vencimento_real.month
 
@@ -735,7 +701,6 @@ class GerenciadorContas:
         )
         self.faturas.append(fatura)
 
-        # Linkar compras à fatura
         for c in elegiveis:
             c.id_fatura = fatura.id_fatura
 
@@ -767,8 +732,6 @@ class GerenciadorContas:
             )
         )
         return True
-
-    # ---------- Categorias ----------
 
     def adicionar_categoria(self, nome: str) -> None:
         nome = (nome or "").strip()
