@@ -1,5 +1,3 @@
-# --- ARQUIVO: app.py (VERSÃO FINAL) ---
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -20,11 +18,9 @@ def formatar_moeda(valor: float) -> str:
 
 st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
-# Inicialização do gerenciador
 if "gerenciador" not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
 
-# Estados de sessão
 for key, default in [
     ("transacao_para_excluir", None),
     ("conta_para_excluir", None),
@@ -35,21 +31,18 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
+st.title("Meu Sistema de Gestão Financeira Pessoal")
 
 tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
     ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
 )
 
-# --- ABA 1: DASHBOARD ---
 with tab_dashboard:
     col1, col2 = st.columns([1, 1])
 
-    # Coluna 2: Ações rápidas, resumo
     with col2:
         st.header("Ações Rápidas")
 
-        # Comprar Ativo
         with st.expander("📈 Comprar Ativo"):
             contas_investimento = [
                 c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)
@@ -58,24 +51,18 @@ with tab_dashboard:
                 st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
             else:
                 with st.form("buy_asset_form", clear_on_submit=True):
-                    st.write("**Registrar Compra de Ativo**")
+                    st.write("Registrar Compra de Ativo")
                     conta_destino_nome = st.selectbox(
                         "Comprar na corretora:", [c.nome for c in contas_investimento]
                     )
                     ticker = st.text_input("Ticker do Ativo (ex: PETR4, AAPL)").upper()
-                    tipo_ativo = st.selectbox(
-                        "Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"]
-                    )
+                    tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"])
                     col_qnt, col_preco = st.columns(2)
                     with col_qnt:
                         quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
                     with col_preco:
-                        preco_unitario = st.number_input(
-                            "Preço por Unidade (R$)", min_value=0.01, format="%.2f"
-                        )
-                    data_compra = st.date_input(
-                        "Data da Compra", value=datetime.today(), format="DD/MM/YYYY"
-                    )
+                        preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.01, format="%.2f")
+                    data_compra = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
                     if st.form_submit_button("Confirmar Compra"):
                         if not all([ticker, quantidade > 0, preco_unitario > 0]):
                             st.error("Preencha todos os detalhes da compra do ativo.")
@@ -99,7 +86,6 @@ with tab_dashboard:
                             else:
                                 st.error("Falha na compra. Verifique o saldo em caixa da corretora.")
 
-        # Receita/Despesa
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [
                 c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
@@ -109,23 +95,18 @@ with tab_dashboard:
             else:
                 with st.form("new_transaction_form", clear_on_submit=True):
                     tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"])
-                    conta_selecionada_nome = st.selectbox(
-                        "Conta Corrente", [c.nome for c in contas_correntes]
-                    )
+                    conta_selecionada_nome = st.selectbox("Conta Corrente", [c.nome for c in contas_correntes])
                     descricao = st.text_input("Descrição")
                     categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-                    data_transacao = st.date_input(
-                        "Data", value=datetime.today(), format="DD/MM/YYYY"
-                    )
+                    data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
                     observacao = st.text_area("Observações (Opcional)")
                     if st.form_submit_button("Registrar"):
                         if not all([descricao, categoria]):
                             st.error("Descrição e Categoria são obrigatórios.")
                         else:
                             conta_id = next(
-                                (c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome),
-                                None,
+                                (c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome), None
                             )
                             sucesso = st.session_state.gerenciador.registrar_transacao(
                                 id_conta=conta_id,
@@ -143,7 +124,6 @@ with tab_dashboard:
                             else:
                                 st.error("Falha ao registrar. Saldo insuficiente?")
 
-        # Resumo Financeiro
         st.header("Resumo Financeiro")
         todas_as_contas = st.session_state.gerenciador.contas
         if todas_as_contas:
@@ -161,11 +141,10 @@ with tab_dashboard:
                 st.metric(label=categoria, value=formatar_moeda(saldo))
             st.divider()
             patrimonio_total = sum(c.saldo for c in todas_as_contas)
-            st.metric(label="**Patrimônio Total**", value=formatar_moeda(patrimonio_total))
+            st.metric(label="Patrimônio Total", value=formatar_moeda(patrimonio_total))
         else:
-            st.metric(label="**Patrimônio Total**", value="R$ 0,00")
+            st.metric(label="Patrimônio Total", value="R$ 0,00")
 
-    # Coluna 1: Transferência
     with col1:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
@@ -177,13 +156,10 @@ with tab_dashboard:
                     conta_origem_nome = st.selectbox("De:", nomes_contas, key="transfer_origem")
                 with col_form2:
                     opcoes_destino = [
-                        nome for nome in nomes_contas
-                        if nome != st.session_state.get("transfer_origem", nomes_contas[0])
+                        nome for nome in nomes_contas if nome != st.session_state.get("transfer_origem", nomes_contas[0])
                     ]
                     conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="transfer_destino")
-                valor_transferencia = st.number_input(
-                    "Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor"
-                )
+                valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
                 if st.form_submit_button("Confirmar Transferência", use_container_width=True):
                     id_origem = next((c.id_conta for c in todas_as_contas if c.nome == conta_origem_nome), None)
                     id_destino = next((c.id_conta for c in todas_as_contas if c.nome == conta_destino_nome), None)
@@ -199,7 +175,6 @@ with tab_dashboard:
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
-# --- ABA 2: HISTÓRICO DE TRANSAÇÕES ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
@@ -208,12 +183,12 @@ with tab_transacoes:
     else:
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
         col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
-        col_data.write("**Data**")
-        col_conta.write("**Conta**")
-        col_desc.write("**Descrição**")
-        col_cat.write("**Categoria**")
-        col_valor.write("**Valor**")
-        col_acao.write("**Ação**")
+        col_data.write("Data")
+        col_conta.write("Conta")
+        col_desc.write("Descrição")
+        col_cat.write("Categoria")
+        col_valor.write("Valor")
+        col_acao.write("Ação")
         st.divider()
 
         for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
@@ -254,12 +229,10 @@ with tab_transacoes:
                         st.rerun()
             st.divider()
 
-# --- ABA 3: GESTÃO DE CONTAS ---
 with tab_contas:
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
 
-    # Adicionar conta
     with col_contas2:
         with st.form("add_account_form", clear_on_submit=True):
             st.subheader("Adicionar Nova Conta")
@@ -289,7 +262,6 @@ with tab_contas:
                         st.success(f"Conta '{nome_conta}' adicionada!")
                         st.rerun()
 
-    # Listar/editar/remover contas
     with col_contas1:
         st.subheader("Contas Existentes")
         todas_as_contas = st.session_state.gerenciador.contas
@@ -308,7 +280,7 @@ with tab_contas:
                 with expander_col:
                     with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
                         if isinstance(conta, ContaCorrente):
-                            st.write(f"**Limite:** {formatar_moeda(conta.limite_cheque_especial)}")
+                            st.write(f"Limite: {formatar_moeda(conta.limite_cheque_especial)}")
                         elif isinstance(conta, ContaInvestimento):
                             st.metric("Patrimônio Consolidado", formatar_moeda(conta.saldo))
                             col_caixa, col_ativos = st.columns(2)
@@ -318,7 +290,7 @@ with tab_contas:
                             if not conta.ativos:
                                 st.info("Nenhum ativo nesta conta ainda.")
                             else:
-                                st.write("**Ativos em Carteira:**")
+                                st.write("Ativos em Carteira:")
                                 df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
                                 df_ativos["valor_total"] = df_ativos.apply(
                                     lambda row: formatar_moeda(row["quantidade"] * row["preco_medio"]), axis=1
@@ -351,9 +323,8 @@ with tab_contas:
                             st.session_state.conta_para_excluir = conta.id_conta
                             st.rerun()
 
-                # Confirmação de remoção da conta (fora do expander_col, mas ainda no loop)
                 if st.session_state.conta_para_excluir == conta.id_conta:
-                    st.warning(f"**ATENÇÃO:** Tem certeza que deseja excluir a conta '{conta.nome}'?")
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a conta '{conta.nome}'?")
                     col_confirm, col_cancel, _ = st.columns([1, 1, 4])
                     with col_confirm:
                         if st.button("Sim, excluir permanentemente", key=f"confirm_del_acc_{conta.id_conta}", type="primary"):
@@ -381,17 +352,14 @@ with tab_contas:
                 for conta in contas_investimento:
                     render_conta_com_confirmacao(conta)
 
-# --- ABA 4: CARTÕES DE CRÉDITO ---
 with tab_cartoes:
     st.header("Gerenciar Cartões de Crédito")
     col_cartoes1, col_cartoes2 = st.columns(2)
 
-    # Adicionar Cartão + Lançar compra
     with col_cartoes2:
-        # Adicionar novo cartão
         with st.form("add_card_form", clear_on_submit=True):
             st.subheader("Adicionar Novo Cartão")
-            nome_cartao = st.text_input("Nome do Cartão (ex: Amex Platinum)")
+            nome_cartao = st.text_input("Nome do Cartão")
             logo_url_cartao = st.text_input("URL do Logo (Opcional)")
             dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=28)
             dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=10)
@@ -416,30 +384,23 @@ with tab_cartoes:
             st.warning("Adicione um cartão de crédito para poder lançar compras.")
         else:
             with st.form("add_card_purchase_form", clear_on_submit=True):
-                cartao_selecionado_nome = st.selectbox(
-                    "Cartão Utilizado", [c.nome for c in cartoes_cadastrados]
-                )
+                cartao_selecionado_nome = st.selectbox("Cartão Utilizado", [c.nome for c in cartoes_cadastrados])
                 descricao_compra = st.text_input("Descrição da Compra")
                 categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                 valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
-                data_compra_cartao = st.date_input(
-                    "Data da Compra", value=datetime.today(), format="DD/MM/YYYY"
-                )
+                data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
                 num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
                 observacao_compra = st.text_area("Observações (Opcional)")
                 if st.form_submit_button("Lançar Compra", use_container_width=True):
                     if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                         st.error("Preencha todos os detalhes da compra.")
                     else:
-                        id_cartao = next(
-                            (c.id_cartao for c in cartoes_cadastrados if c.nome == cartao_selecionado_nome),
-                            None,
-                        )
+                        id_cartao = next((c.id_cartao for c in cartoes_cadastrados if c.nome == cartao_selecionado_nome), None)
                         sucesso = st.session_state.gerenciador.registrar_compra_cartao(
                             id_cartao=id_cartao,
                             descricao=descricao_compra,
                             valor_total=valor_compra,
-                            data_compra=data_compra_cartao,
+                            data_compra=data_compra_cartao,  # data real da compra
                             categoria=categoria_compra,
                             num_parcelas=num_parcelas,
                             observacao=observacao_compra,
@@ -451,7 +412,6 @@ with tab_cartoes:
                         else:
                             st.error("Falha ao registrar a compra.")
 
-    # Faturas dos cartões + exclusão de cartão + detalhes de faturas fechadas
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
         cartoes = st.session_state.gerenciador.cartoes_credito
@@ -470,14 +430,11 @@ with tab_cartoes:
                 with expander_col:
                     compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
                     valor_fatura_aberta = sum(c.valor for c in compras_abertas)
-                    faturas_fechadas = [
-                        f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao
-                    ]
+                    faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
 
                     with st.expander(f"{cartao.nome} - Fatura Aberta: {formatar_moeda(valor_fatura_aberta)}"):
                         tab_aberta, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Histórico de Faturas"])
 
-                        # Lançamentos da fatura aberta
                         with tab_aberta:
                             st.metric("Total em Aberto", formatar_moeda(valor_fatura_aberta))
                             if not compras_abertas:
@@ -485,14 +442,15 @@ with tab_cartoes:
                             else:
                                 for compra in sorted(compras_abertas, key=lambda x: x.data_compra):
                                     c1, c2 = st.columns([4, 1])
-                                    desc = f"{compra.data_compra.strftime('%d/%m/%Y')} - {compra.descricao}: {formatar_moeda(compra.valor)}"
+                                    venc_str = compra.data_compra.strftime("%d/%m/%Y")
+                                    real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    desc = f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}"
                                     c1.text(desc)
                                     with c2:
                                         if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
                                             st.session_state.compra_para_excluir = compra.id_compra_original
                                             st.rerun()
 
-                                    # Confirmação de exclusão (dentro do loop para não referenciar variável fora de escopo)
                                     if st.session_state.compra_para_excluir == compra.id_compra_original:
                                         st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
                                         cc1, cc2 = st.columns(2)
@@ -507,20 +465,13 @@ with tab_cartoes:
                                             st.rerun()
 
                             st.divider()
-                            # Fechar fatura
                             with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
-                                st.write("**Fechar Fatura**")
+                                st.write("Fechar Fatura")
                                 col_form_f1, col_form_f2 = st.columns(2)
-                                data_fechamento_real = col_form_f1.date_input(
-                                    "Data Real do Fechamento", value=date.today(), format="DD/MM/YYYY"
-                                )
-                                data_vencimento_real = col_form_f2.date_input(
-                                    "Data Real do Vencimento", value=date.today() + timedelta(days=10), format="DD/MM/YYYY"
-                                )
+                                data_fechamento_real = col_form_f1.date_input("Data Real do Fechamento", value=date.today(), format="DD/MM/YYYY")
+                                data_vencimento_real = col_form_f2.date_input("Data Real do Vencimento", value=date.today() + timedelta(days=10), format="DD/MM/YYYY")
                                 if st.form_submit_button("Confirmar Fechamento", type="primary"):
-                                    nova_fatura = st.session_state.gerenciador.fechar_fatura(
-                                        cartao.id_cartao, data_fechamento_real, data_vencimento_real
-                                    )
+                                    nova_fatura = st.session_state.gerenciador.fechar_fatura(cartao.id_cartao, data_fechamento_real, data_vencimento_real)
                                     if nova_fatura:
                                         st.session_state.gerenciador.salvar_dados()
                                         st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%B/%Y')} fechada!")
@@ -528,7 +479,6 @@ with tab_cartoes:
                                     else:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
 
-                        # Histórico de faturas
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -536,25 +486,20 @@ with tab_cartoes:
                                 for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
                                     fatura_col1, fatura_col2 = st.columns([3, 1])
                                     cor = "green" if fatura.status == "Paga" else "red"
-                                    fatura_col1.metric(
-                                        f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}",
-                                        formatar_moeda(fatura.valor_total),
-                                    )
-                                    fatura_col1.caption(
-                                        f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]"
-                                    )
+                                    fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
+                                    fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
 
-                                    # Ver lançamentos da fatura fechada
                                     with st.expander("Ver Lançamentos"):
                                         lancamentos_fatura = [
-                                            c for c in st.session_state.gerenciador.compras_cartao
-                                            if c.id_fatura == fatura.id_fatura
+                                            c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura
                                         ]
                                         if not lancamentos_fatura:
                                             st.caption("Nenhum lançamento encontrado para esta fatura.")
                                         else:
                                             for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
-                                                st.text(f"{lanc.data_compra.strftime('%d/%m/%Y')} - {lanc.descricao}: {formatar_moeda(lanc.valor)}")
+                                                venc_str = lanc.data_compra.strftime("%d/%m/%Y")
+                                                real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
+                                                st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
                                     if fatura.status == "Fechada":
                                         with fatura_col2:
@@ -566,26 +511,17 @@ with tab_cartoes:
 
                                     if st.session_state.fatura_para_pagar == fatura.id_fatura:
                                         with st.form(f"pay_bill_form_{fatura.id_fatura}"):
-                                            st.warning(
-                                                f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%B/%Y')}?"
-                                            )
+                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%B/%Y')}?")
                                             contas_correntes_pagamento = [
                                                 c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
                                             ]
-                                            conta_pagamento_nome = st.selectbox(
-                                                "Pagar com a conta:", [c.nome for c in contas_correntes_pagamento]
-                                            )
-                                            data_pagamento = st.date_input(
-                                                "Data do Pagamento", value=date.today(), format="DD/MM/YYYY"
-                                            )
+                                            conta_pagamento_nome = st.selectbox("Pagar com a conta:", [c.nome for c in contas_correntes_pagamento])
+                                            data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
                                             if st.form_submit_button("Confirmar Pagamento"):
                                                 id_conta_pagamento = next(
-                                                    (c.id_conta for c in contas_correntes_pagamento if c.nome == conta_pagamento_nome),
-                                                    None,
+                                                    (c.id_conta for c in contas_correntes_pagamento if c.nome == conta_pagamento_nome), None
                                                 )
-                                                sucesso = st.session_state.gerenciador.pagar_fatura(
-                                                    fatura.id_fatura, id_conta_pagamento, data_pagamento
-                                                )
+                                                sucesso = st.session_state.gerenciador.pagar_fatura(fatura.id_fatura, id_conta_pagamento, data_pagamento)
                                                 if sucesso:
                                                     st.session_state.gerenciador.salvar_dados()
                                                     st.toast("Fatura paga com sucesso!")
@@ -597,17 +533,13 @@ with tab_cartoes:
                                             st.session_state.fatura_para_pagar = None
                                             st.rerun()
 
-                        # Botão de remover cartão (fora do expander de fatura aberta, mas dentro do expander_col)
                         st.divider()
                         if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
                             st.session_state.cartao_para_excluir = cartao.id_cartao
                             st.rerun()
 
-                # Confirmação para remover cartão (fora do expander_col, mas ainda dentro do loop do cartão)
                 if st.session_state.cartao_para_excluir == cartao.id_cartao:
-                    st.warning(
-                        f"**ATENÇÃO:** Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?"
-                    )
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
                     col_confirm, col_cancel, _ = st.columns([1, 1, 3])
                     with col_confirm:
                         if st.button("Sim, excluir permanentemente", key=f"confirm_del_card_{cartao.id_cartao}", type="primary"):
@@ -621,9 +553,8 @@ with tab_cartoes:
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
 
-# --- ABA 5: CONFIGURAÇÕES ---
 with tab_config:
-    st.header("⚙️ Configurações Gerais")
+    st.header("Configurações Gerais")
     st.subheader("Gerenciar Categorias")
     col_cat1, col_cat2 = st.columns(2)
 
