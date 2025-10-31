@@ -1,355 +1,779 @@
-# --- ARQUIVO: sistema_financeiro.py (VERSÃO 71 - CORREÇÃO FINAL DE CARREGAMENTO DE ATIVOS) ---
-
 import json
+import os
+import calendar
 from abc import ABC, abstractmethod
 from uuid import uuid4
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict, Any
 from dateutil.relativedelta import relativedelta
-import calendar
 
-# ... (Classes Fatura, CompraCartao, CartaoCredito, Ativo, Transacao, Conta, ContaCorrente, ContaInvestimento não mudam) ...
-class Fatura:
-    def __init__(self, id_cartao: str, mes: int, ano: int, data_fechamento: date, data_vencimento: date, valor_total: float, id_fatura: str = None, status: str = "Fechada"):
-        self.id_fatura, self.id_cartao, self.mes, self.ano, self.data_fechamento, self.data_vencimento, self.valor_total, self.status = (id_fatura if id_fatura else str(uuid4()), id_cartao, mes, ano, data_fechamento, data_vencimento, valor_total, status)
-    def para_dict(self) -> Dict[str, Any]:
-        d = self.__dict__.copy(); d['data_fechamento'] = self.data_fechamento.isoformat(); d['data_vencimento'] = self.data_vencimento.isoformat(); return d
 
-class CompraCartao:
-    def __init__(self, id_cartao: str, descricao: str, valor: float, data_compra: date, categoria: str, total_parcelas: int = 1, parcela_atual: int = 1, id_compra: str = None, id_compra_original: str = None, observacao: str = "", id_fatura: str = None):
-        self.id_compra = id_compra if id_compra else str(uuid4()); self.id_compra_original = id_compra_original if id_compra_original else self.id_compra
-        self.id_cartao, self.descricao, self.valor, self.data_compra, self.categoria, self.total_parcelas, self.parcela_atual, self.observacao, self.id_fatura = id_cartao, descricao, valor, data_compra, categoria, total_parcelas, parcela_atual, observacao, id_fatura
-        self.paga = False
-    def para_dict(self) -> Dict[str, Any]:
-        d = self.__dict__.copy(); d['data_compra'] = self.data_compra.isoformat(); return d
+# =========================
+# Utilidades
+# =========================
 
-class CartaoCredito:
-    def __init__(self, nome: str, dia_fechamento: int, dia_vencimento: int, id_cartao: str = None, logo_url: str = ""):
-        if not (1 <= dia_fechamento <= 31 and 1 <= dia_vencimento <= 31): raise ValueError("Dias de fechamento e vencimento devem ser válidos.")
-        self.id_cartao, self.nome, self.logo_url, self.dia_fechamento, self.dia_vencimento = (id_cartao if id_cartao else str(uuid4()), nome, logo_url, dia_fechamento, dia_vencimento)
-    def para_dict(self) -> Dict[str, Any]: return self.__dict__
+def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except Exception:
+            pass
+    return default if default is not None else date.today()
 
-class Ativo:
-    def __init__(self, ticker: str, quantidade: float, preco_medio: float, tipo_ativo: str):
-        self.ticker, self.quantidade, self.preco_medio, self.tipo_ativo = ticker, quantidade, preco_medio, tipo_ativo
-    @property
-    def valor_total(self) -> float: return self.quantidade * self.preco_medio
-    def para_dict(self) -> Dict[str, Any]: return self.__dict__
+
+# =========================
+# Entidades
+# =========================
 
 class Transacao:
-    def __init__(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str, id_transacao: str = None, detalhes_operacao: Dict = None, observacao: str = ""):
-        self.id_transacao = id_transacao if id_transacao else str(uuid4())
-        self.id_conta, self.descricao, self.valor, self.tipo, self.data, self.categoria, self.detalhes_operacao, self.observacao = id_conta, descricao, valor, tipo, data_transacao, categoria, detalhes_operacao if detalhes_operacao else {}, observacao
+    def __init__(
+        self,
+        id_conta: str,
+        descricao: str,
+        valor: float,
+        tipo: str,
+        data_transacao: date,
+        categoria: str,
+        observacao: str = "",
+        id_transacao: Optional[str] = None,
+    ):
+        self.id_transacao = id_transacao or str(uuid4())
+        self.id_conta = id_conta
+        self.descricao = descricao
+        self.valor = float(valor)
+        self.data = data_transacao
+        self.categoria = categoria
+        self.observacao = observacao
+
     def para_dict(self) -> Dict[str, Any]:
-        d = self.__dict__.copy(); d['data'] = self.data.isoformat(); return d
+        return {
+            "id_transacao": self.id_transacao,
+            "id_conta": self.id_conta,
+            "descricao": self.descricao,
+            "valor": self.valor,
+            "tipo": self.tipo,
+            "data": self.data.isoformat(),
+            "categoria": self.categoria,
+            "observacao": self.observacao,
+        }
+
+
+class Ativo:
+    def __init__(
+        self,
+        ticker: str,
+        quantidade: float,
+        preco_medio: float,
+        tipo_ativo: str = "Outro",
+    ):
+        self.ticker = ticker.upper()
+        self.quantidade = float(quantidade)
+        self.preco_medio = float(preco_medio)
+        self.tipo_ativo = tipo_ativo
+
+    @property
+    def valor_total(self) -> float:
+        return self.quantidade * self.preco_medio
+
+    def para_dict(self) -> Dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "quantidade": self.quantidade,
+            "preco_medio": self.preco_medio,
+            "tipo_ativo": self.tipo_ativo,
+        }
+
 
 class Conta(ABC):
-    def __init__(self, nome: str, saldo: float = 0.0, id_conta: str = None, logo_url: str = ""):
-        self._id_conta, self._nome, self._saldo, self._logo_url = (id_conta if id_conta else str(uuid4()), nome, saldo, logo_url if logo_url else "")
-    def alterar_saldo(self, valor: float): self._saldo += valor
-    @property
-    def logo_url(self) -> str: return self._logo_url
-    def editar_logo_url(self, nova_url: str) -> bool:
-        if isinstance(nova_url, str): self._logo_url = nova_url; return True
-        return False
-    def editar_nome(self, novo_nome: str) -> bool:
-        if isinstance(novo_nome, str) and novo_nome.strip(): self._nome = novo_nome; return True
-        return False
-    @property
-    def id_conta(self) -> str: return self._id_conta
-    @property
-    def nome(self) -> str: return self._nome
-    @property
-    def saldo(self) -> float: return self._saldo
-    def depositar(self, valor: float):
-        if not isinstance(valor, (int, float)) or valor <= 0: return
-        self._saldo += valor
+    def __init__(self, nome: str, logo_url: str = "", id_conta: Optional[str] = None):
+        self.id_conta = id_conta or str(uuid4())
+        self.nome = nome
+        self.logo_url = logo_url
+
     @abstractmethod
-    def sacar(self, valor: float) -> bool: pass
     def para_dict(self) -> Dict[str, Any]:
-        return {"id_conta": self.id_conta, "tipo_classe": self.__class__.__name__, "nome": self.nome, "saldo": self.saldo, "logo_url": self.logo_url}
-    def __repr__(self) -> str: return f"<{self.__class__.__name__}(nome='{self.nome}', saldo=R${self.saldo:.2f})>"
+        ...
+
+    def editar_nome(self, novo_nome: str) -> bool:
+        if novo_nome and novo_nome != self.nome:
+            self.nome = novo_nome
+            return True
+        return False
+
+    def editar_logo_url(self, nova_url: str) -> bool:
+        if nova_url != self.logo_url:
+            self.logo_url = nova_url
+            return True
+        return False
+
 
 class ContaCorrente(Conta):
-    def __init__(self, nome: str, saldo: float = 0.0, limite_cheque_especial: float = 0.0, **kwargs):
-        super().__init__(nome, saldo, **kwargs)
-        self._limite_cheque_especial = limite_cheque_especial
-    def editar_limite(self, novo_limite: float) -> bool:
-        if isinstance(novo_limite, (int, float)) and novo_limite >= 0: self._limite_cheque_especial = novo_limite; return True
+    def __init__(
+        self,
+        nome: str,
+        saldo: float = 0.0,
+        limite_cheque_especial: float = 0.0,
+        logo_url: str = "",
+        id_conta: Optional[str] = None,
+    ):
+        super().__init__(nome=nome, logo_url=logo_url, id_conta=id_conta)
+        self.saldo = float(saldo)
+        self.limite_cheque_especial = float(limite_cheque_especial)
+
+    def editar_limite(self, novo: float) -> bool:
+        novo = float(novo)
+        if novo != self.limite_cheque_especial:
+            self.limite_cheque_especial = novo
+            return True
         return False
-    @property
-    def limite_cheque_especial(self) -> float: return self._limite_cheque_especial
-    @property
-    def saldo_disponivel_saque(self) -> float: return self.saldo + self.limite_cheque_especial
-    def sacar(self, valor: float) -> bool:
-        if not isinstance(valor, (int, float)) or valor <= 0: return False
-        if valor > self.saldo_disponivel_saque: return False
-        self._saldo -= valor
-        return True
+
     def para_dict(self) -> Dict[str, Any]:
-        dados = super().para_dict(); dados["limite_cheque_especial"] = self.limite_cheque_especial; return dados
+        return {
+            "tipo": "ContaCorrente",
+            "id_conta": self.id_conta,
+            "nome": self.nome,
+            "logo_url": self.logo_url,
+            "saldo": self.saldo,
+            "limite_cheque_especial": self.limite_cheque_especial,
+        }
+
 
 class ContaInvestimento(Conta):
-    def __init__(self, nome: str, saldo: float = 0.0, **kwargs):
-        super().__init__(nome, saldo, **kwargs)
-        self._ativos: List[Ativo] = []
+    def __init__(
+        self,
+        nome: str,
+        logo_url: str = "",
+        saldo_caixa: float = 0.0,
+        ativos: Optional[List[Ativo]] = None,
+        id_conta: Optional[str] = None,
+    ):
+        super().__init__(nome=nome, logo_url=logo_url, id_conta=id_conta)
+        self.saldo_caixa = float(saldo_caixa)
+        self.ativos: List[Ativo] = ativos or []
+
     @property
-    def saldo_caixa(self) -> float: return self._saldo
+    def valor_em_ativos(self) -> float:
+        return sum(a.valor_total for a in self.ativos)
+
     @property
-    def valor_em_ativos(self) -> float: return sum(ativo.valor_total for ativo in self._ativos)
-    @property
-    def saldo(self) -> float: return self.saldo_caixa + self.valor_em_ativos
-    @property
-    def ativos(self) -> List[Ativo]: return self._ativos
-    def atualizar_ou_adicionar_ativo(self, ticker: str, quantidade_compra: float, preco_compra: float, tipo_ativo: str):
-        for ativo in self._ativos:
-            if ativo.ticker.upper() == ticker.upper():
-                custo_total_antigo = ativo.quantidade * ativo.preco_medio; custo_total_compra = quantidade_compra * preco_compra; nova_quantidade = ativo.quantidade + quantidade_compra
-                ativo.preco_medio = (custo_total_antigo + custo_total_compra) / nova_quantidade; ativo.quantidade = nova_quantidade
+    def saldo(self) -> float:
+        return self.saldo_caixa + self.valor_em_ativos
+
+    def atualizar_ou_adicionar_ativo(
+        self,
+        ticker: str,
+        quantidade: float,
+        preco_medio: float,
+        tipo_ativo: str = "Outro",
+    ) -> None:
+        ticker = ticker.upper()
+        for a in self.ativos:
+            if a.ticker == ticker and a.tipo_ativo == tipo_ativo:
+                total_valor_antigo = a.preco_medio * a.quantidade
+                total_valor_novo = preco_medio * quantidade
+                nova_qtd = a.quantidade + quantidade
+                if nova_qtd > 0:
+                    a.preco_medio = (total_valor_antigo + total_valor_novo) / nova_qtd
+                    a.quantidade = nova_qtd
+                else:
+                    a.quantidade = 0.0
                 return
-        self._ativos.append(Ativo(ticker.upper(), quantidade_compra, preco_compra, tipo_ativo))
-    def reverter_operacao_ativo(self, ticker: str, quantidade_reverter: float, preco_reverter: float) -> bool:
-        for i, ativo in enumerate(self._ativos):
-            if ativo.ticker.upper() == ticker.upper():
-                if ativo.quantidade < quantidade_reverter: return False
-                custo_total_atual = ativo.quantidade * ativo.preco_medio; custo_total_reversao = quantidade_reverter * preco_reverter; nova_quantidade = ativo.quantidade - quantidade_reverter
-                if nova_quantidade == 0: self._ativos.pop(i)
-                else: ativo.preco_medio = (custo_total_atual - custo_total_reversao) / nova_quantidade; ativo.quantidade = nova_quantidade
-                return True
-        return False
-    def sacar(self, valor: float) -> bool:
-        if not isinstance(valor, (int, float)) or valor <= 0: return False
-        if valor > self.saldo_caixa: return False
-        self._saldo -= valor
-        return True
+        self.ativos.append(Ativo(ticker, quantidade, preco_medio, tipo_ativo))
+
     def para_dict(self) -> Dict[str, Any]:
-        dados = super().para_dict(); dados["ativos"] = [ativo.para_dict() for ativo in self._ativos]; return dados
+        return {
+            "tipo": "ContaInvestimento",
+            "id_conta": self.id_conta,
+            "nome": self.nome,
+            "logo_url": self.logo_url,
+            "saldo_caixa": self.saldo_caixa,
+            "ativos": [a.para_dict() for a in self.ativos],
+        }
+
+
+class CartaoCredito:
+    def __init__(
+        self,
+        nome: str,
+        logo_url: str = "",
+        dia_fechamento: int = 28,
+        dia_vencimento: int = 10,
+        id_cartao: Optional[str] = None,
+    ):
+        self.id_cartao = id_cartao or str(uuid4())
+        self.nome = nome
+        self.logo_url = logo_url
+        self.dia_fechamento = int(dia_fechamento)
+        self.dia_vencimento = int(dia_vencimento)
+
+    def para_dict(self) -> Dict[str, Any]:
+        return {
+            "id_cartao": self.id_cartao,
+            "nome": self.nome,
+            "logo_url": self.logo_url,
+            "dia_fechamento": self.dia_fechamento,
+            "dia_vencimento": self.dia_vencimento,
+        }
+
+    def editar_nome(self, novo_nome: str) -> bool:
+        if novo_nome and novo_nome != self.nome:
+            self.nome = novo_nome
+            return True
+        return False
+
+    def editar_logo_url(self, nova_url: str) -> bool:
+        if nova_url != self.logo_url:
+            self.logo_url = nova_url
+            return True
+        return False
+
+
+class CompraCartao:
+    def __init__(
+        self,
+        id_cartao: str,
+        descricao: str,
+        valor: float,
+        data_compra: date,
+        categoria: str,
+        total_parcelas: int = 1,
+        parcela_atual: int = 1,
+        id_compra_original: Optional[str] = None,
+        observacao: str = "",
+        id_compra: Optional[str] = None,
+        id_fatura: Optional[str] = None,
+    ):
+        self.id_compra = id_compra or str(uuid4())
+        self.id_cartao = id_cartao
+        self.descricao = descricao
+        self.valor = float(valor)
+        # IMPORTANTE: neste sistema, data_compra representa a DATA DE VENCIMENTO da parcela
+        self.data_compra = data_compra
+        self.categoria = categoria
+        self.total_parcelas = int(total_parcelas)
+        self.parcela_atual = int(parcela_atual)
+        self.id_compra_original = id_compra_original or self.id_compra
+        self.observacao = observacao
+        self.id_fatura = id_fatura  # preenchido ao fechar fatura
+
+    def para_dict(self) -> Dict[str, Any]:
+        return {
+            "id_compra": self.id_compra,
+            "id_cartao": self.id_cartao,
+            "descricao": self.descricao,
+            "valor": self.valor,
+            "data_compra": self.data_compra.isoformat(),
+            "categoria": self.categoria,
+            "total_parcelas": self.total_parcelas,
+            "parcela_atual": self.parcela_atual,
+            "id_compra_original": self.id_compra_original,
+            "observacao": self.observacao,
+            "id_fatura": self.id_fatura,
+        }
+
+
+class Fatura:
+    def __init__(
+        self,
+        id_cartao: str,
+        data_fechamento: date,
+        data_vencimento: date,
+        valor_total: float,
+        status: str = "Fechada",
+        id_fatura: Optional[str] = None,
+    ):
+        self.id_fatura = id_fatura or str(uuid4())
+        self.id_cartao = id_cartao
+        self.data_fechamento = data_fechamento
+        self.data_vencimento = data_vencimento
+        self.valor_total = float(valor_total)
+        self.status = status  # "Fechada" | "Paga"
+
+    def para_dict(self) -> Dict[str, Any]:
+        return {
+            "id_fatura": self.id_fatura,
+            "id_cartao": self.id_cartao,
+            "data_fechamento": self.data_fechamento.isoformat(),
+            "data_vencimento": self.data_vencimento.isoformat(),
+            "valor_total": self.valor_total,
+            "status": self.status,
+        }
+
+
+# =========================
+# Gerenciador
+# =========================
 
 class GerenciadorContas:
-    def __init__(self, arquivo_dados: str):
-        self._contas: List[Conta] = []; self._transacoes: List[Transacao] = []; self._cartoes_credito: List[CartaoCredito] = []; self._compras_cartao: List[CompraCartao] = []; self._categorias: List[str] = []; self._faturas: List[Fatura] = []
-        self._arquivo_dados = arquivo_dados
+    def __init__(self, caminho_arquivo: str = "dados.json"):
+        self.caminho_arquivo = caminho_arquivo
+        self.contas: List[Conta] = []
+        self.transacoes: List[Transacao] = []
+        self.cartoes_credito: List[CartaoCredito] = []
+        self.compras_cartao: List[CompraCartao] = []
+        self.faturas: List[Fatura] = []
+        self.categorias: List[str] = [
+            "Alimentação",
+            "Transporte",
+            "Moradia",
+            "Saúde",
+            "Lazer",
+            "Educação",
+            "Impostos",
+            "Investimentos",
+            "Outros",
+        ]
         self.carregar_dados()
-    
-    @property
-    def contas(self) -> List[Conta]: return self._contas
-    @property
-    def transacoes(self) -> List[Transacao]: return self._transacoes
-    @property
-    def cartoes_credito(self) -> List[CartaoCredito]: return self._cartoes_credito
-    @property
-    def compras_cartao(self) -> List[CompraCartao]: return self._compras_cartao
-    @property
-    def categorias(self) -> List[str]: return self._categorias
-    @property
-    def faturas(self) -> List[Fatura]: return self._faturas
 
-    def obter_compras_fatura_aberta(self, id_cartao: str):
-        return [c for c in self._compras_cartao if c.id_cartao == id_cartao and c.id_fatura is None]
+    # ---------- Persistência ----------
 
-    def carregar_dados(self):
+    def salvar_dados(self) -> None:
+        data = {
+            "contas": [c.para_dict() for c in self.contas],
+            "transacoes": [t.para_dict() for t in self.transacoes],
+            "cartoes_credito": [c.para_dict() for c in self.cartoes_credito],
+            "compras_cartao": [c.para_dict() for c in self.compras_cartao],
+            "faturas": [f.para_dict() for f in self.faturas],
+            "categorias": self.categorias,
+        }
+        with open(self.caminho_arquivo, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def carregar_dados(self) -> None:
+        if not os.path.exists(self.caminho_arquivo):
+            return
         try:
-            with open(self._arquivo_dados, 'r', encoding='utf-8') as f: dados_completos = json.load(f)
-            self._contas = []
-            for d in dados_completos.get("contas", []):
-                tipo_classe = d.pop("tipo_classe")
-                if tipo_classe == "ContaCorrente": self._contas.append(ContaCorrente(**d))
-                elif tipo_classe == "ContaInvestimento":
-                    ativos_data = d.pop("ativos", [])
-                    conta_invest = ContaInvestimento(**d)
-                    # --- MUDANÇA PRINCIPAL AQUI ---
-                    for ativo_d in ativos_data:
-                        # O método 'atualizar_ou_adicionar_ativo' espera os argumentos, não um objeto.
-                        conta_invest.atualizar_ou_adicionar_ativo(
-                            ticker=ativo_d.get('ticker'),
-                            quantidade_compra=ativo_d.get('quantidade'),
-                            preco_compra=ativo_d.get('preco_medio'),
-                            tipo_ativo=ativo_d.get('tipo_ativo')
-                        )
-                    self._contas.append(conta_invest)
-            self._transacoes = []
-            for d in dados_completos.get("transacoes", []):
-                args = {"id_conta": d.get("id_conta"), "descricao": d.get("descricao"), "valor": d.get("valor"), "tipo": d.get("tipo"), "data_transacao": date.fromisoformat(d.get("data")), "categoria": d.get("categoria", "Não categorizado"), "id_transacao": d.get("id_transacao"), "detalhes_operacao": d.get("detalhes_operacao"), "observacao": d.get("observacao", "")}
-                self._transacoes.append(Transacao(**args))
-            self._cartoes_credito = [CartaoCredito(**d) for d in dados_completos.get("cartoes_credito", [])]
-            self._compras_cartao = []
-            for d in dados_completos.get("compras_cartao", []):
-                args = {"id_cartao": d.get("id_cartao"), "descricao": d.get("descricao"), "valor": d.get("valor"), "data_compra": date.fromisoformat(d.get("data_compra")), "categoria": d.get("categoria", "Não categorizado"), "total_parcelas": d.get("total_parcelas", 1), "parcela_atual": d.get("parcela_atual", 1), "id_compra": d.get("id_compra"), "id_compra_original": d.get("id_compra_original"), "observacao": d.get("observacao", ""), "id_fatura": d.get("id_fatura")}
-                self._compras_cartao.append(CompraCartao(**args))
-            self._faturas = []
-            for d in dados_completos.get("faturas", []):
-                args = {"id_cartao": d.get("id_cartao"), "mes": d.get("mes"), "ano": d.get("ano"), "data_fechamento": date.fromisoformat(d.get("data_fechamento")), "data_vencimento": date.fromisoformat(d.get("data_vencimento")), "valor_total": d.get("valor_total"), "id_fatura": d.get("id_fatura"), "status": d.get("status", "Fechada")}
-                self._faturas.append(Fatura(**args))
-            self._categorias = dados_completos.get("categorias", ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"])
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._contas, self._transacoes, self._cartoes_credito, self._compras_cartao, self._faturas, self._categorias = [], [], [], [], [], ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação", "Salário", "Outros"]
+            with open(self.caminho_arquivo, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return
 
-       def registrar_compra_cartao(self, id_cartao: str, descricao: str, valor_total: float, data_compra: date, categoria: str, num_parcelas: int = 1, observacao: str = "") -> bool:
+        # Contas
+        self.contas = []
+        for c in data.get("contas", []):
+            tipo = c.get("tipo", "ContaCorrente")
+            if tipo == "ContaCorrente":
+                conta = ContaCorrente(
+                    nome=c.get("nome", "Sem Nome"),
+                    saldo=float(c.get("saldo", 0.0)),
+                    limite_cheque_especial=float(c.get("limite_cheque_especial", 0.0)),
+                    logo_url=c.get("logo_url", ""),
+                    id_conta=c.get("id_conta"),
+                )
+            else:
+                ativos_lidos: List[Ativo] = []
+                for a in c.get("ativos", []):
+                    ativos_lidos.append(
+                        Ativo(
+                            ticker=a.get("ticker", ""),
+                            quantidade=float(a.get("quantidade", 0.0)),
+                            preco_medio=float(a.get("preco_medio", 0.0)),
+                            tipo_ativo=a.get("tipo_ativo", "Outro"),
+                        )
+                    )
+                conta = ContaInvestimento(
+                    nome=c.get("nome", "Sem Nome"),
+                    logo_url=c.get("logo_url", ""),
+                    saldo_caixa=float(c.get("saldo_caixa", 0.0)),
+                    ativos=ativos_lidos,
+                    id_conta=c.get("id_conta"),
+                )
+            self.contas.append(conta)
+
+        # Transações
+        self.transacoes = []
+        for t in data.get("transacoes", []):
+            self.transacoes.append(
+                Transacao(
+                    id_conta=t.get("id_conta", ""),
+                    descricao=t.get("descricao", ""),
+                    valor=float(t.get("valor", 0.0)),
+                    tipo=t.get("tipo", "Despesa"),
+                    data_transacao=parse_date_safe(t.get("data"), date.today()),
+                    categoria=t.get("categoria", "Outros"),
+                    observacao=t.get("observacao", ""),
+                    id_transacao=t.get("id_transacao"),
+                )
+            )
+
+        # Cartões
+        self.cartoes_credito = []
+        for cc in data.get("cartoes_credito", []):
+            self.cartoes_credito.append(
+                CartaoCredito(
+                    nome=cc.get("nome", "Cartão"),
+                    logo_url=cc.get("logo_url", ""),
+                    dia_fechamento=int(cc.get("dia_fechamento", 28)),
+                    dia_vencimento=int(cc.get("dia_vencimento", 10)),
+                    id_cartao=cc.get("id_cartao"),
+                )
+            )
+
+        # Compras Cartão
+        self.compras_cartao = []
+        for c in data.get("compras_cartao", []):
+            self.compras_cartao.append(
+                CompraCartao(
+                    id_compra=c.get("id_compra"),
+                    id_cartao=c.get("id_cartao", ""),
+                    descricao=c.get("descricao", ""),
+                    valor=float(c.get("valor", 0.0)),
+                    data_compra=parse_date_safe(c.get("data_compra"), date.today()),
+                    categoria=c.get("categoria", "Outros"),
+                    total_parcelas=int(c.get("total_parcelas", 1)),
+                    parcela_atual=int(c.get("parcela_atual", 1)),
+                    id_compra_original=c.get("id_compra_original"),
+                    observacao=c.get("observacao", ""),
+                    id_fatura=c.get("id_fatura"),
+                )
+            )
+
+        # Faturas
+        self.faturas = []
+        for f in data.get("faturas", []):
+            self.faturas.append(
+                Fatura(
+                    id_fatura=f.get("id_fatura"),
+                    id_cartao=f.get("id_cartao", ""),
+                    data_fechamento=parse_date_safe(f.get("data_fechamento"), date.today()),
+                    data_vencimento=parse_date_safe(f.get("data_vencimento"), date.today()),
+                    valor_total=float(f.get("valor_total", 0.0)),
+                    status=f.get("status", "Fechada"),
+                )
+            )
+
+        # Categorias
+        cats = data.get("categorias")
+        if isinstance(cats, list) and cats:
+            self.categorias = cats
+
+    # ---------- Contas ----------
+
+    def adicionar_conta(self, conta: Conta) -> None:
+        self.contas.append(conta)
+
+    def remover_conta(self, id_conta: str) -> bool:
+        conta = next((c for c in self.contas if c.id_conta == id_conta), None)
+        if not conta:
+            return False
+        # Remover transações ligadas
+        self.transacoes = [t for t in self.transacoes if t.id_conta != id_conta]
+        self.contas = [c for c in self.contas if c.id_conta != id_conta]
+        return True
+
+    def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
+        return next((c for c in self.contas if c.id_conta == id_conta), None)
+
+    # ---------- Transações e Transferências ----------
+
+    def registrar_transacao(
+        self,
+        id_conta: str,
+        descricao: str,
+        valor: float,
+        tipo: str,
+        data_transacao: date,
+        categoria: str,
+        observacao: str = "",
+    ) -> bool:
+        conta = self.buscar_conta_por_id(id_conta)
+        if not conta:
+            return False
+
+        if tipo == "Receita":
+            if isinstance(conta, ContaCorrente):
+                conta.saldo += float(valor)
+            elif isinstance(conta, ContaInvestimento):
+                conta.saldo_caixa += float(valor)
+        elif tipo == "Despesa":
+            if isinstance(conta, ContaCorrente):
+                if conta.saldo + conta.limite_cheque_especial < float(valor):
+                    return False
+                conta.saldo -= float(valor)
+            elif isinstance(conta, ContaInvestimento):
+                if conta.saldo_caixa < float(valor):
+                    return False
+                conta.saldo_caixa -= float(valor)
+        else:
+            # Outros tipos, ex: Transferência, não devem vir por aqui
+            pass
+
+        self.transacoes.append(
+            Transacao(
+                id_conta=id_conta,
+                descricao=descricao,
+                valor=float(valor),
+                tipo=tipo,
+                data_transacao=data_transacao,
+                categoria=categoria,
+                observacao=observacao,
+            )
+        )
+        return True
+
+    def realizar_transferencia(self, id_origem: str, id_destino: str, valor: float) -> bool:
+        if id_origem == id_destino:
+            return False
+        valor = float(valor)
+        conta_origem = self.buscar_conta_por_id(id_origem)
+        conta_destino = self.buscar_conta_por_id(id_destino)
+        if not conta_origem or not conta_destino:
+            return False
+
+        # Debita origem
+        if isinstance(conta_origem, ContaCorrente):
+            if conta_origem.saldo + conta_origem.limite_cheque_especial < valor:
+                return False
+            conta_origem.saldo -= valor
+        elif isinstance(conta_origem, ContaInvestimento):
+            if conta_origem.saldo_caixa < valor:
+                return False
+            conta_origem.saldo_caixa -= valor
+
+        # Credita destino
+        if isinstance(conta_destino, ContaCorrente):
+            conta_destino.saldo += valor
+        elif isinstance(conta_destino, ContaInvestimento):
+            conta_destino.saldo_caixa += valor
+
+        hoje = date.today()
+        self.transacoes.append(
+            Transacao(
+                id_conta=id_origem,
+                descricao=f"Transferência para {conta_destino.nome}",
+                valor=valor,
+                tipo="Despesa",
+                data_transacao=hoje,
+                categoria="Transferência",
+            )
+        )
+        self.transacoes.append(
+            Transacao(
+                id_conta=id_destino,
+                descricao=f"Transferência de {conta_origem.nome}",
+                valor=valor,
+                tipo="Receita",
+                data_transacao=hoje,
+                categoria="Transferência",
+            )
+        )
+        return True
+
+    def remover_transacao(self, id_transacao: str) -> bool:
+        t = next((x for x in self.transacoes if x.id_transacao == id_transacao), None)
+        if not t:
+            return False
+        conta = self.buscar_conta_por_id(t.id_conta)
+        if isinstance(conta, ContaCorrente):
+            if t.tipo == "Receita":
+                conta.saldo -= t.valor
+            elif t.tipo == "Despesa":
+                conta.saldo += t.valor
+        elif isinstance(conta, ContaInvestimento):
+            if t.tipo == "Receita":
+                conta.saldo_caixa -= t.valor
+            elif t.tipo == "Despesa":
+                conta.saldo_caixa += t.valor
+        self.transacoes = [x for x in self.transacoes if x.id_transacao != id_transacao]
+        return True
+
+    # ---------- Investimentos ----------
+
+    def comprar_ativo(
+        self,
+        id_conta_destino: str,
+        ticker: str,
+        quantidade: float,
+        preco_unitario: float,
+        tipo_ativo: str,
+        data_compra: date,
+    ) -> bool:
+        conta = self.buscar_conta_por_id(id_conta_destino)
+        if not conta or not isinstance(conta, ContaInvestimento):
+            return False
+        custo = float(quantidade) * float(preco_unitario)
+        if conta.saldo_caixa < custo:
+            return False
+        conta.saldo_caixa -= custo
+        conta.atualizar_ou_adicionar_ativo(
+            ticker=ticker,
+            quantidade=float(quantidade),
+            preco_medio=float(preco_unitario),
+            tipo_ativo=tipo_ativo,
+        )
+        self.transacoes.append(
+            Transacao(
+                id_conta=conta.id_conta,
+                descricao=f"Compra de {ticker}",
+                valor=custo,
+                tipo="Despesa",
+                data_transacao=data_compra,
+                categoria="Investimentos",
+            )
+        )
+        return True
+
+    # ---------- Cartões de Crédito e Faturas ----------
+
+    def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]:
+        return next((c for c in self.cartoes_credito if c.id_cartao == id_cartao), None)
+
+    def adicionar_cartao_credito(self, cartao: CartaoCredito) -> None:
+        self.cartoes_credito.append(cartao)
+
+    def remover_cartao_credito(self, id_cartao: str) -> bool:
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return False
+        # Remove compras e faturas associadas
+        self.compras_cartao = [c for c in self.compras_cartao if c.id_cartao != id_cartao]
+        self.faturas = [f for f in self.faturas if f.id_cartao != id_cartao]
+        self.cartoes_credito = [c for c in self.cartoes_credito if c.id_cartao != id_cartao]
+        return True
+
+    def obter_compras_fatura_aberta(self, id_cartao: str) -> List[CompraCartao]:
+        # Lançamentos ainda não ligados a fatura (id_fatura None)
+        return [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+        ]
+
+    def registrar_compra_cartao(
+        self,
+        id_cartao: str,
+        descricao: str,
+        valor_total: float,
+        data_compra: date,
+        categoria: str,
+        num_parcelas: int = 1,
+        observacao: str = "",
+    ) -> bool:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return False
 
-        valor_parcela = round(valor_total / num_parcelas, 2)
+        valor_parcela = round(float(valor_total) / int(num_parcelas), 2)
         id_compra_original = str(uuid4())
 
-        # --- INÍCIO DA NOVA LÓGICA CORRIGIDA ---
-
-        # 1. Determina a data de fechamento para o mês em que a compra foi realizada.
-        #    Isso define em qual ciclo de fatura a compra se encaixa.
+        # 1) Data de fechamento no mês da compra (ajusta meses curtos)
         try:
             data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
         except ValueError:
-            # Trata casos de meses com menos dias que o dia do fechamento (ex: fechar dia 31 em Fev)
-            ultimo_dia_mes = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo_dia_mes)
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
 
-        # 2. Determina a data de vencimento da PRIMEIRA parcela.
+        # 2) Determinar vencimento da primeira parcela
+        try:
+            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
+        except ValueError:
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            base_venc = date(data_compra.year, data_compra.month, ultimo)
+
         if data_compra <= data_fechamento_ciclo:
-            # Se a compra foi ANTES ou NO DIA do fechamento, ela entra na próxima fatura.
-            # Ex: Compra em 18/10, Fechamento 28/10 -> Vencimento em 10/11.
-            vencimento_primeira_parcela = date(data_compra.year, data_compra.month, cartao.dia_vencimento) + relativedelta(months=1)
+            vencimento_primeira = base_venc + relativedelta(months=1)
         else:
-            # Se a compra foi DEPOIS do fechamento, ela "pula" para a fatura seguinte.
-            # Ex: Compra em 29/10, Fechamento 28/10 -> Vencimento em 10/12.
-            vencimento_primeira_parcela = date(data_compra.year, data_compra.month, cartao.dia_vencimento) + relativedelta(months=2)
+            vencimento_primeira = base_venc + relativedelta(months=2)
 
-        # 3. Itera para criar cada parcela com sua respectiva data de vencimento.
+        # 3) Criar parcelas com data_compra = data de vencimento
         for i in range(num_parcelas):
-            # A data de vencimento de cada parcela subsequente é um mês após a anterior.
-            data_vencimento_parcela = vencimento_primeira_parcela + relativedelta(months=i)
-            
-            desc_parcela = f"{descricao} ({i+1}/{num_parcelas})" if num_parcelas > 1 else descricao
-            
-            # ATENÇÃO: O campo 'data_compra' no objeto CompraCartao será usado para armazenar a DATA DE VENCIMENTO da parcela.
-            # Isso é crucial para que a lógica de fechamento de fatura funcione corretamente.
-            nova_compra = CompraCartao(
+            data_venc_parcela = vencimento_primeira + relativedelta(months=i)
+            desc_parcela = f"{descricao} ({i + 1}/{num_parcelas})" if num_parcelas > 1 else descricao
+            nova = CompraCartao(
                 id_cartao=id_cartao,
                 descricao=desc_parcela,
                 valor=valor_parcela,
-                data_compra=data_vencimento_parcela, # Usando a data de VENCIMENTO calculada!
+                data_compra=data_venc_parcela,
                 categoria=categoria,
                 total_parcelas=num_parcelas,
                 parcela_atual=i + 1,
                 id_compra_original=id_compra_original,
-                observacao=observacao
+                observacao=observacao,
             )
-            self._compras_cartao.append(nova_compra)
-        
-        # --- FIM DA NOVA LÓGICA ---
-        
+            self.compras_cartao.append(nova)
+
         return True
-    def buscar_fatura_por_id(self, id_fatura: str) -> Optional[Fatura]:
-        return next((f for f in self._faturas if f.id_fatura == id_fatura), None)
-    def adicionar_cartao_credito(self, cartao: CartaoCredito):
-        if isinstance(cartao, CartaoCredito): self._cartoes_credito.append(cartao)
-    def remover_cartao_credito(self, id_cartao: str) -> bool:
-        cartao_para_remover = self.buscar_cartao_por_id(id_cartao)
-        if not cartao_para_remover: return False
-        self._cartoes_credito.remove(cartao_para_remover)
-        self._compras_cartao = [c for c in self._compras_cartao if c.id_cartao != id_cartao]
-        self._faturas = [f for f in self._faturas if f.id_cartao != id_cartao]
-        return True
-    def adicionar_categoria(self, categoria: str):
-        if isinstance(categoria, str) and categoria.strip() and categoria not in self._categorias:
-            self._categorias.append(categoria)
-            self._categorias.sort()
-    def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
-        fatura = self.buscar_fatura_por_id(id_fatura)
-        conta_pagamento = self.buscar_conta_por_id(id_conta_pagamento)
-        if not fatura or not isinstance(conta_pagamento, ContaCorrente) or fatura.status == "Paga": return False
-        if not conta_pagamento.sacar(fatura.valor_total): return False
-        fatura.status = "Paga"
-        for compra in self._compras_cartao:
-            if compra.id_fatura == id_fatura: compra.paga = True
-        cartao_associado = self.buscar_cartao_por_id(fatura.id_cartao)
-        descricao = f"Pagamento Fatura - {cartao_associado.nome} ({fatura.data_vencimento.strftime('%b/%Y')})"
-        self._apenas_registrar_transacao(id_conta_pagamento, descricao, fatura.valor_total, "Despesa", data_pagamento, "Pagamento de Fatura")
-        return True
-    def fechar_fatura(self, id_cartao: str, data_fechamento_real: date, data_vencimento_real: date) -> Optional[Fatura]:
+
+    def remover_compra_cartao(self, id_compra_original: str) -> None:
+        # Remove todas as parcelas de uma compra original (sem tocar faturas pagas)
+        self.compras_cartao = [
+            c for c in self.compras_cartao if c.id_compra_original != id_compra_original
+        ]
+
+    def fechar_fatura(
+        self,
+        id_cartao: str,
+        data_fechamento_real: date,
+        data_vencimento_real: date,
+    ) -> Optional[Fatura]:
         cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao: return None
-        faturas_anteriores = sorted([f for f in self._faturas if f.id_cartao == id_cartao], key=lambda f: f.data_fechamento, reverse=True)
-        data_inicio_periodo = faturas_anteriores[0].data_fechamento + timedelta(days=1) if faturas_anteriores else date(1900, 1, 1)
-        compras_para_fechar = [c for c in self.obter_compras_fatura_aberta(id_cartao) if data_inicio_periodo <= c.data_compra <= data_fechamento_real]
-        if not compras_para_fechar: return None
-        valor_total_fatura = sum(c.valor for c in compras_para_fechar)
-        nova_fatura = Fatura(id_cartao=id_cartao, mes=data_vencimento_real.month, ano=data_vencimento_real.year, data_fechamento=data_fechamento_real, data_vencimento=data_vencimento_real, valor_total=valor_total_fatura)
-        for compra in compras_para_fechar: compra.id_fatura = nova_fatura.id_fatura
-        self._faturas.append(nova_fatura)
-        return nova_fatura
-    def remover_categoria(self, categoria: str):
-        if categoria in self._categorias: self._categorias.remove(categoria)
-    def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]: return next((c for c in self._cartoes_credito if c.id_cartao == id_cartao), None)
-    def remover_compra_cartao(self, id_compra_original: str) -> bool:
-        compras_para_remover = [c for c in self._compras_cartao if c.id_compra_original == id_compra_original]
-        if not compras_para_remover: return False
-        self._compras_cartao = [c for c in self._compras_cartao if c.id_compra_original != id_compra_original]
+        if not cartao:
+            return None
+
+        # Como data_compra armazena vencimento, basta selecionar pelo mês/ano do vencimento
+        ano = data_vencimento_real.year
+        mes = data_vencimento_real.month
+
+        elegiveis = [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+            and c.data_compra.year == ano and c.data_compra.month == mes
+        ]
+        if not elegiveis:
+            return None
+
+        total = round(sum(c.valor for c in elegiveis), 2)
+        fatura = Fatura(
+            id_cartao=id_cartao,
+            data_fechamento=data_fechamento_real,
+            data_vencimento=data_vencimento_real,
+            valor_total=total,
+            status="Fechada",
+        )
+        self.faturas.append(fatura)
+
+        # Linkar compras à fatura
+        for c in elegiveis:
+            c.id_fatura = fatura.id_fatura
+
+        return fatura
+
+    def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
+        fatura = next((f for f in self.faturas if f.id_fatura == id_fatura), None)
+        if not fatura or fatura.status == "Paga":
+            return False
+        conta = self.buscar_conta_por_id(id_conta_pagamento)
+        if not conta or not isinstance(conta, ContaCorrente):
+            return False
+
+        valor = fatura.valor_total
+        if conta.saldo + conta.limite_cheque_especial < valor:
+            return False
+
+        conta.saldo -= valor
+        fatura.status = "Paga"
+
+        self.transacoes.append(
+            Transacao(
+                id_conta=conta.id_conta,
+                descricao=f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}",
+                valor=valor,
+                tipo="Despesa",
+                data_transacao=data_pagamento,
+                categoria="Cartão de Crédito",
+            )
+        )
         return True
-    def salvar_dados(self):
-        dados_completos = {"contas": [c.para_dict() for c in self._contas], "transacoes": [t.para_dict() for t in self._transacoes], "cartoes_credito": [cc.para_dict() for cc in self._cartoes_credito], "compras_cartao": [cp.para_dict() for cp in self._compras_cartao], "categorias": self._categorias, "faturas": [f.para_dict() for f in self._faturas]}
-        with open(self._arquivo_dados, 'w', encoding='utf-8') as f: json.dump(dados_completos, f, indent=4, ensure_ascii=False)
-    def comprar_ativo(self, id_conta_destino: str, ticker: str, quantidade: float, preco_unitario: float, tipo_ativo: str, data_compra: date) -> bool:
-        conta_destino = self.buscar_conta_por_id(id_conta_destino)
-        if not isinstance(conta_destino, ContaInvestimento): return False
-        custo_total = quantidade * preco_unitario
-        if not conta_destino.sacar(custo_total): return False
-        conta_destino.atualizar_ou_adicionar_ativo(ticker, quantidade, preco_unitario, tipo_ativo)
-        detalhes = {"ticker": ticker, "quantidade": quantidade, "preco_unitario": preco_unitario}
-        self._apenas_registrar_transacao(id_conta_destino, f"Compra de {quantidade}x {ticker}", custo_total, "Despesa", data_compra, "Compra de Ativo", detalhes_operacao=detalhes)
-        return True
-    def reverter_compra_ativo(self, id_transacao: str) -> bool:
-        transacao = next((t for t in self._transacoes if t.id_transacao == id_transacao), None)
-        if not transacao or not transacao.detalhes_operacao: return False
-        conta_invest = self.buscar_conta_por_id(transacao.id_conta)
-        if not isinstance(conta_invest, ContaInvestimento): return False
-        detalhes = transacao.detalhes_operacao; ticker = detalhes["ticker"]; quantidade = detalhes["quantidade"]; preco_unitario = detalhes["preco_unitario"]; custo_total = quantidade * preco_unitario
-        if not conta_invest.reverter_operacao_ativo(ticker, quantidade, preco_unitario): return False
-        conta_invest.depositar(custo_total); self._transacoes.remove(transacao)
-        return True
-    def remover_transacao(self, id_transacao: str) -> bool:
-        transacao = next((t for t in self._transacoes if t.id_transacao == id_transacao), None)
-        if not transacao: return False
-        if transacao.categoria == "Compra de Ativo": return self.reverter_compra_ativo(id_transacao)
-        conta_afetada = self.buscar_conta_por_id(transacao.id_conta)
-        if conta_afetada:
-            valor_reversao = -transacao.valor if transacao.tipo == "Receita" else transacao.valor
-            conta_afetada.alterar_saldo(valor_reversao)
-        self._transacoes.remove(transacao)
-        return True
-    def _apenas_registrar_transacao(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str, detalhes_operacao: Dict = None, observacao: str = ""):
-        nova_transacao = Transacao(id_conta, descricao, valor, tipo, data_transacao, categoria, detalhes_operacao=detalhes_operacao, observacao=observacao)
-        self._transacoes.append(nova_transacao)
-    def registrar_transacao(self, id_conta: str, descricao: str, valor: float, tipo: str, data_transacao: date, categoria: str, observacao: str = "") -> bool:
-        conta = self.buscar_conta_por_id(id_conta)
-        if not conta: return False
-        valor_efetivo = valor if tipo == "Receita" else -valor
-        if tipo == "Despesa":
-            if isinstance(conta, ContaCorrente) and valor > conta.saldo_disponivel_saque: return False
-            if isinstance(conta, ContaInvestimento) and valor > conta.saldo_caixa: return False
-        conta.alterar_saldo(valor_efetivo)
-        self._apenas_registrar_transacao(id_conta, descricao, valor, tipo, data_transacao, categoria, observacao=observacao)
-        return True
-    def realizar_transferencia(self, id_origem: str, id_destino: str, valor: float) -> bool:
-        conta_origem = self.buscar_conta_por_id(id_origem); conta_destino = self.buscar_conta_por_id(id_destino)
-        if not all([conta_origem, conta_destino]) or id_origem == id_destino or valor <= 0: return False
-        if conta_origem.sacar(valor):
-            conta_destino.depositar(valor)
-            hoje = date.today()
-            self._apenas_registrar_transacao(id_origem, f"Transferência para {conta_destino.nome}", valor, "Despesa", hoje, "Transferência")
-            self._apenas_registrar_transacao(id_destino, f"Transferência de {conta_origem.nome}", valor, "Receita", hoje, "Transferência")
-            return True
-        return False
-    def adicionar_conta(self, conta: Conta):
-        if not isinstance(conta, Conta): return
-        self._contas.append(conta)
-    def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
-        for conta in self._contas:
-            if conta.id_conta == id_conta: return conta
-        return None
-    def remover_conta(self, id_conta: str) -> bool:
-        conta_para_remover = self.buscar_conta_por_id(id_conta)
-        if conta_para_remover:
-            self._contas.remove(conta_para_remover)
-            self._transacoes = [t for t in self._transacoes if t.id_conta != id_conta]
-            return True
-        return False
+
+    # ---------- Categorias ----------
+
+    def adicionar_categoria(self, nome: str) -> None:
+        nome = (nome or "").strip()
+        if nome and nome not in self.categorias:
+            self.categorias.append(nome)
+
+    def remover_categoria(self, nome: str) -> None:
+        self.categorias = [c for c in self.categorias if c != nome]
