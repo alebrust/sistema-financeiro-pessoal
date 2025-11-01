@@ -239,7 +239,7 @@ class CompraCartao:
         observacao: str = "",
         id_compra: Optional[str] = None,
         id_fatura: Optional[str] = None,
-        data_compra_real: Optional[date] = None,  # NOVO: data real da compra
+        data_compra_real: Optional[date] = None,  # data real da compra
     ):
         self.id_compra = id_compra or str(uuid4())
         self.id_cartao = id_cartao
@@ -267,7 +267,7 @@ class CompraCartao:
             "id_compra_original": self.id_compra_original,
             "observacao": self.observacao,
             "id_fatura": self.id_fatura,
-            "data_compra_real": self.data_compra_real.isoformat(),  # NOVO
+            "data_compra_real": self.data_compra_real.isoformat(),  # real
         }
 
 
@@ -416,7 +416,7 @@ class GerenciadorContas:
                     id_compra_original=c.get("id_compra_original"),
                     observacao=c.get("observacao", ""),
                     id_fatura=c.get("id_fatura"),
-                    data_compra_real=data_real,  # NOVO
+                    data_compra_real=data_real,  # real
                 )
             )
 
@@ -607,9 +607,68 @@ class GerenciadorContas:
         return True
 
     def obter_compras_fatura_aberta(self, id_cartao: str) -> List[CompraCartao]:
+        # Retrocompatível: retorna tudo em aberto (id_fatura None)
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
+        ]
+
+    def _calcular_mes_ano_fatura_aberta(self, cartao: CartaoCredito, data_ref: Optional[date] = None) -> tuple[int, int]:
+        """
+        Retorna (ano, mes) do vencimento da fatura atualmente em aberto para o cartão, com base em data_ref (ou hoje).
+        Regra:
+          - Se data_ref <= dia_fechamento do mês atual → fatura aberta vence no mês + 1
+          - Senão → vence no mês + 2
+        """
+        hoje = data_ref or date.today()
+        try:
+            fechamento_atual = date(hoje.year, hoje.month, cartao.dia_fechamento)
+        except ValueError:
+            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
+            fechamento_atual = date(hoje.year, hoje.month, ultimo)
+
+        try:
+            base_venc = date(hoje.year, hoje.month, cartao.dia_vencimento)
+        except ValueError:
+            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
+            base_venc = date(hoje.year, hoje.month, ultimo)
+
+        if hoje <= fechamento_atual:
+            vencimento = base_venc + relativedelta(months=1)
+        else:
+            vencimento = base_venc + relativedelta(months=2)
+
+        return vencimento.year, vencimento.month
+
+    def obter_lancamentos_abertos_do_vencimento(self, id_cartao: str, data_ref: Optional[date] = None) -> List[CompraCartao]:
+        """
+        Lançamentos (id_fatura None) cujo vencimento (data_compra) pertence ao mês/ano da fatura atualmente aberta.
+        """
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return []
+        ano, mes = self._calcular_mes_ano_fatura_aberta(cartao, data_ref)
+        return [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+            and c.data_compra.year == ano and c.data_compra.month == mes
+        ]
+
+    def obter_lancamentos_futuros(self, id_cartao: str, data_ref: Optional[date] = None) -> List[CompraCartao]:
+        """
+        Lançamentos (id_fatura None) com vencimento após o mês/ano da fatura aberta.
+        """
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return []
+        ano_atual, mes_atual = self._calcular_mes_ano_fatura_aberta(cartao, data_ref)
+
+        def _posterior(c: CompraCartao) -> bool:
+            return (c.data_compra.year, c.data_compra.month) > (ano_atual, mes_atual)
+
+        return [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None and _posterior(c)
         ]
 
     def registrar_compra_cartao(
@@ -659,7 +718,7 @@ class GerenciadorContas:
                 parcela_atual=i + 1,
                 id_compra_original=id_compra_original,
                 observacao=observacao,
-                data_compra_real=data_compra,        # data real da compra
+                data_compra_real=data_compra,        # real
             )
             self.compras_cartao.append(nova)
 
