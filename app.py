@@ -430,31 +430,45 @@ with tab_cartoes:
                         st.write("💳")
 
                 with expander_col:
-                    # Data de referência do ciclo (por cartão)
-                    ref_key = f"ref_date_cartao_{cartao.id_cartao}"
-                    default_ref = st.session_state.get(ref_key) or date.today()
-                    ref_date = st.date_input(
-                        "Data de Referência do Ciclo",
-                        value=default_ref,
-                        format="DD/MM/YYYY",
-                        key=ref_key,
-                    )
+                    # Ciclos disponíveis: todos os ciclos abertos + ciclo "corrente"
+                    ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao)
+                    if not ciclos:
+                        # fallback: inclui ciclo corrente
+                        hoje = date.today()
+                        ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao, hoje)
 
-                    aberto_do_venc = st.session_state.gerenciador.obter_lancamentos_abertos_do_vencimento(cartao.id_cartao, ref_date)
-                    valor_fatura_aberta = sum(c.valor for c in aberto_do_venc)
-                    futuros = st.session_state.gerenciador.obter_lancamentos_futuros(cartao.id_cartao, ref_date)
+                    # Seleção padrão: ciclo aberto mais antigo (se houver), senão o primeiro da lista
+                    padrao = st.session_state.gerenciador.ciclo_aberto_mais_antigo(cartao.id_cartao) or ciclos[0]
+
+                    # Mapeia rótulos MM/YYYY -> (ano, mes)
+                    labels = [f"{mes:02d}/{ano}" for (ano, mes) in ciclos]
+                    idx_padrao = ciclos.index(padrao) if padrao in ciclos else 0
+
+                    sel_label = st.selectbox(
+                        "Ciclo de Referência",
+                        options=labels,
+                        index=idx_padrao,
+                        key=f"ciclo_ref_{cartao.id_cartao}",
+                    )
+                    sel_idx = labels.index(sel_label)
+                    sel_ano, sel_mes = ciclos[sel_idx]
+
+                    # Dados do ciclo selecionado
+                    aberto_do_ciclo = st.session_state.gerenciador.obter_lancamentos_do_ciclo(cartao.id_cartao, sel_ano, sel_mes)
+                    valor_fatura_aberta = sum(c.valor for c in aberto_do_ciclo)
+                    futuros = st.session_state.gerenciador.obter_lancamentos_futuros_desde(cartao.id_cartao, sel_ano, sel_mes)
                     faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
 
-                    with st.expander(f"{cartao.nome} - Fatura Aberta (ref {ref_date.strftime('%d/%m/%Y')}): {formatar_moeda(valor_fatura_aberta)}"):
+                    with st.expander(f"{cartao.nome} - Fatura Aberta ({sel_label}): {formatar_moeda(valor_fatura_aberta)}"):
                         tab_aberta, tab_futuros, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Lançamentos Futuros", "Histórico de Faturas"])
 
-                        # Abas: Em Aberto (ciclo atual)
+                        # Em Aberto (somente ciclo selecionado)
                         with tab_aberta:
-                            st.metric("Total em Aberto (Ciclo Atual)", formatar_moeda(valor_fatura_aberta))
-                            if not aberto_do_venc:
-                                st.info("Nenhum lançamento em aberto para o ciclo de vencimento atual.")
+                            st.metric("Total em Aberto (Ciclo Selecionado)", formatar_moeda(valor_fatura_aberta))
+                            if not aberto_do_ciclo:
+                                st.info("Nenhum lançamento em aberto para o ciclo selecionado.")
                             else:
-                                for compra in sorted(aberto_do_venc, key=lambda x: x.data_compra):
+                                for compra in sorted(aberto_do_ciclo, key=lambda x: x.data_compra):
                                     c1, c2 = st.columns([4, 1])
                                     venc_str = compra.data_compra.strftime("%d/%m/%Y")
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
@@ -484,22 +498,30 @@ with tab_cartoes:
                                             st.rerun()
 
                             st.divider()
-                            # Fechar fatura (manual, usando datas reais dadas pelo usuário)
+                            # Fechar fatura (datas reais definidas pelo usuário)
                             with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
                                 st.write("Fechar Fatura")
                                 col_form_f1, col_form_f2 = st.columns(2)
+                                # Sugere datas coerentes com o ciclo selecionado
+                                data_venc_sugerida = date(sel_ano, sel_mes, 1)
+                                # Ajuste: define dia como 10 (ou o que preferir) apenas como sugestão
+                                try:
+                                    data_venc_sugerida = date(sel_ano, sel_mes, 10)
+                                except Exception:
+                                    data_venc_sugerida = date(sel_ano, sel_mes, 1)
+
                                 data_fechamento_real = col_form_f1.date_input("Data Real do Fechamento", value=date.today(), format="DD/MM/YYYY")
-                                data_vencimento_real = col_form_f2.date_input("Data Real do Vencimento", value=date.today() + timedelta(days=10), format="DD/MM/YYYY")
+                                data_vencimento_real = col_form_f2.date_input("Data Real do Vencimento", value=data_venc_sugerida, format="DD/MM/YYYY")
                                 if st.form_submit_button("Confirmar Fechamento", type="primary"):
                                     nova_fatura = st.session_state.gerenciador.fechar_fatura(cartao.id_cartao, data_fechamento_real, data_vencimento_real)
                                     if nova_fatura:
                                         st.session_state.gerenciador.salvar_dados()
-                                        st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%B/%Y')} fechada!")
+                                        st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%m/%Y')} fechada!")
                                         st.rerun()
                                     else:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
 
-                        # Abas: Lançamentos Futuros
+                        # Futuros (após o ciclo selecionado)
                         with tab_futuros:
                             total_futuro = sum(c.valor for c in futuros)
                             st.metric("Total Futuro (Próximas Competências)", formatar_moeda(total_futuro))
@@ -511,12 +533,11 @@ with tab_cartoes:
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
                                     st.text(f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}")
 
-                                    # Observação (se houver)
                                     if getattr(compra, "observacao", None):
                                         with st.expander("Observação", expanded=False):
                                             st.write(compra.observacao)
 
-                        # Abas: Histórico de Faturas
+                        # Histórico de faturas fechadas (inalterado, só exibição da observação por lançamento)
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -524,7 +545,7 @@ with tab_cartoes:
                                 for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
                                     fatura_col1, fatura_col2 = st.columns([3, 1])
                                     cor = "green" if fatura.status == "Paga" else "red"
-                                    fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%B/%Y')}", formatar_moeda(fatura.valor_total))
+                                    fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", formatar_moeda(fatura.valor_total))
                                     fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
 
                                     with st.expander("Ver Lançamentos"):
@@ -539,7 +560,6 @@ with tab_cartoes:
                                                 real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
-                                                # Observação (se houver)
                                                 if getattr(lanc, "observacao", None):
                                                     with st.expander("Observação", expanded=False):
                                                         st.write(lanc.observacao)
@@ -554,7 +574,7 @@ with tab_cartoes:
 
                                     if st.session_state.fatura_para_pagar == fatura.id_fatura:
                                         with st.form(f"pay_bill_form_{fatura.id_fatura}"):
-                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%B/%Y')}?")
+                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
                                             contas_correntes_pagamento = [
                                                 c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
                                             ]
