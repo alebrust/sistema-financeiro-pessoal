@@ -4,7 +4,7 @@ import calendar
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from dateutil.relativedelta import relativedelta
 
 
@@ -437,6 +437,94 @@ class GerenciadorContas:
         if isinstance(cats, list) and cats:
             self.categorias = cats
 
+    # ------------------------
+    # Utilidades de Ciclos
+    # ------------------------
+
+    def _calcular_mes_ano_fatura_aberta(self, cartao: CartaoCredito, data_ref: Optional[date] = None) -> Tuple[int, int]:
+        """
+        Vencimento do ciclo "aberto" considerando uma data de referência (ou hoje).
+        Se data_ref <= dia_fechamento do mês → vence no mês + 1
+        Caso contrário → vence no mês + 2
+        """
+        hoje = data_ref or date.today()
+        try:
+            fechamento_atual = date(hoje.year, hoje.month, cartao.dia_fechamento)
+        except ValueError:
+            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
+            fechamento_atual = date(hoje.year, hoje.month, ultimo)
+
+        try:
+            base_venc = date(hoje.year, hoje.month, cartao.dia_vencimento)
+        except ValueError:
+            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
+            base_venc = date(hoje.year, hoje.month, ultimo)
+
+        if hoje <= fechamento_atual:
+            vencimento = base_venc + relativedelta(months=1)
+        else:
+            vencimento = base_venc + relativedelta(months=2)
+
+        return vencimento.year, vencimento.month
+
+    def ciclos_abertos_unicos(self, id_cartao: str) -> List[Tuple[int, int]]:
+        """
+        Lista de ciclos (ano, mes) presentes em compras sem fatura (id_fatura None), ordenada ascendente.
+        """
+        ciclos = {
+            (c.data_compra.year, c.data_compra.month)
+            for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+        }
+        return sorted(list(ciclos))
+
+    def ciclo_aberto_mais_antigo(self, id_cartao: str) -> Optional[Tuple[int, int]]:
+        """
+        Retorna o ciclo em aberto mais antigo, se existir.
+        """
+        ciclos = self.ciclos_abertos_unicos(id_cartao)
+        return ciclos[0] if ciclos else None
+
+    def listar_ciclos_navegacao(self, id_cartao: str, data_ref: Optional[date] = None) -> List[Tuple[int, int]]:
+        """
+        Retorna a lista de ciclos para navegação:
+        - Todos os ciclos com lançamentos sem fatura (abertos), ASC
+        - Garante incluir o ciclo "corrente" calculado por data_ref (ou hoje), mesmo que não haja lançamentos nele
+        """
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return []
+        base = self.ciclos_abertos_unicos(id_cartao)
+        ano_corr, mes_corr = self._calcular_mes_ano_fatura_aberta(cartao, data_ref)
+        if (ano_corr, mes_corr) not in base:
+            base.append((ano_corr, mes_corr))
+        base = sorted(base)
+        return base
+
+    def obter_lancamentos_do_ciclo(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
+        """
+        Lançamentos sem fatura cujo vencimento é exatamente o ciclo (ano, mes) indicado.
+        """
+        return [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+            and c.data_compra.year == ano and c.data_compra.month == mes
+        ]
+
+    def obter_lancamentos_futuros_desde(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
+        """
+        Lançamentos sem fatura com vencimento após o ciclo (ano, mes) indicado.
+        """
+        return [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao and c.id_fatura is None
+            and (c.data_compra.year, c.data_compra.month) > (ano, mes)
+        ]
+
+    # ------------------------
+    # Operações
+    # ------------------------
+
     def adicionar_conta(self, conta: Conta) -> None:
         self.contas.append(conta)
 
@@ -539,24 +627,6 @@ class GerenciadorContas:
         )
         return True
 
-    def remover_transacao(self, id_transacao: str) -> bool:
-        t = next((x for x in self.transacoes if x.id_transacao == id_transacao), None)
-        if not t:
-            return False
-        conta = self.buscar_conta_por_id(t.id_conta)
-        if isinstance(conta, ContaCorrente):
-            if t.tipo == "Receita":
-                conta.saldo -= t.valor
-            elif t.tipo == "Despesa":
-                conta.saldo += t.valor
-        elif isinstance(conta, ContaInvestimento):
-            if t.tipo == "Receita":
-                conta.saldo_caixa -= t.valor
-            elif t.tipo == "Despesa":
-                conta.saldo_caixa += t.valor
-        self.transacoes = [x for x in self.transacoes if x.id_transacao != id_transacao]
-        return True
-
     def comprar_ativo(
         self,
         id_conta_destino: str,
@@ -613,64 +683,6 @@ class GerenciadorContas:
             if c.id_cartao == id_cartao and c.id_fatura is None
         ]
 
-    def _calcular_mes_ano_fatura_aberta(self, cartao: CartaoCredito, data_ref: Optional[date] = None) -> tuple[int, int]:
-        """
-        Retorna (ano, mes) do vencimento da fatura atualmente em aberto para o cartão, com base em data_ref (ou hoje).
-        Regra:
-          - Se data_ref <= dia_fechamento do mês atual → fatura aberta vence no mês + 1
-          - Senão → vence no mês + 2
-        """
-        hoje = data_ref or date.today()
-        try:
-            fechamento_atual = date(hoje.year, hoje.month, cartao.dia_fechamento)
-        except ValueError:
-            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
-            fechamento_atual = date(hoje.year, hoje.month, ultimo)
-
-        try:
-            base_venc = date(hoje.year, hoje.month, cartao.dia_vencimento)
-        except ValueError:
-            ultimo = calendar.monthrange(hoje.year, hoje.month)[1]
-            base_venc = date(hoje.year, hoje.month, ultimo)
-
-        if hoje <= fechamento_atual:
-            vencimento = base_venc + relativedelta(months=1)
-        else:
-            vencimento = base_venc + relativedelta(months=2)
-
-        return vencimento.year, vencimento.month
-
-    def obter_lancamentos_abertos_do_vencimento(self, id_cartao: str, data_ref: Optional[date] = None) -> List[CompraCartao]:
-        """
-        Lançamentos (id_fatura None) cujo vencimento (data_compra) pertence ao mês/ano da fatura atualmente aberta.
-        """
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao:
-            return []
-        ano, mes = self._calcular_mes_ano_fatura_aberta(cartao, data_ref)
-        return [
-            c for c in self.compras_cartao
-            if c.id_cartao == id_cartao and c.id_fatura is None
-            and c.data_compra.year == ano and c.data_compra.month == mes
-        ]
-
-    def obter_lancamentos_futuros(self, id_cartao: str, data_ref: Optional[date] = None) -> List[CompraCartao]:
-        """
-        Lançamentos (id_fatura None) com vencimento após o mês/ano da fatura aberta.
-        """
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao:
-            return []
-        ano_atual, mes_atual = self._calcular_mes_ano_fatura_aberta(cartao, data_ref)
-
-        def _posterior(c: CompraCartao) -> bool:
-            return (c.data_compra.year, c.data_compra.month) > (ano_atual, mes_atual)
-
-        return [
-            c for c in self.compras_cartao
-            if c.id_cartao == id_cartao and c.id_fatura is None and _posterior(c)
-        ]
-
     def registrar_compra_cartao(
         self,
         id_cartao: str,
@@ -723,11 +735,6 @@ class GerenciadorContas:
             self.compras_cartao.append(nova)
 
         return True
-
-    def remover_compra_cartao(self, id_compra_original: str) -> None:
-        self.compras_cartao = [
-            c for c in self.compras_cartao if c.id_compra_original != id_compra_original
-        ]
 
     def fechar_fatura(
         self,
