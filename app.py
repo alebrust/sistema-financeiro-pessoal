@@ -31,12 +31,13 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.title("Meu Sistema de Gestão Financeira Pessoal")
+st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
 tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
     ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
 )
 
+# --- DASHBOARD ---
 with tab_dashboard:
     col1, col2 = st.columns([1, 1])
 
@@ -52,9 +53,7 @@ with tab_dashboard:
             else:
                 with st.form("buy_asset_form", clear_on_submit=True):
                     st.write("Registrar Compra de Ativo")
-                    conta_destino_nome = st.selectbox(
-                        "Comprar na corretora:", [c.nome for c in contas_investimento]
-                    )
+                    conta_destino_nome = st.selectbox("Comprar na corretora:", [c.nome for c in contas_investimento])
                     ticker = st.text_input("Ticker do Ativo (ex: PETR4, AAPL)").upper()
                     tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"])
                     col_qnt, col_preco = st.columns(2)
@@ -67,10 +66,7 @@ with tab_dashboard:
                         if not all([ticker, quantidade > 0, preco_unitario > 0]):
                             st.error("Preencha todos os detalhes da compra do ativo.")
                         else:
-                            id_destino = next(
-                                (c.id_conta for c in contas_investimento if c.nome == conta_destino_nome),
-                                None,
-                            )
+                            id_destino = next((c.id_conta for c in contas_investimento if c.nome == conta_destino_nome), None)
                             sucesso = st.session_state.gerenciador.comprar_ativo(
                                 id_conta_destino=id_destino,
                                 ticker=ticker,
@@ -105,9 +101,7 @@ with tab_dashboard:
                         if not all([descricao, categoria]):
                             st.error("Descrição e Categoria são obrigatórios.")
                         else:
-                            conta_id = next(
-                                (c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome), None
-                            )
+                            conta_id = next((c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome), None)
                             sucesso = st.session_state.gerenciador.registrar_transacao(
                                 id_conta=conta_id,
                                 descricao=descricao,
@@ -175,6 +169,7 @@ with tab_dashboard:
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
+# --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
     transacoes = st.session_state.gerenciador.transacoes
@@ -210,6 +205,11 @@ with tab_transacoes:
                     st.session_state.transacao_para_excluir = t.id_transacao
                     st.rerun()
 
+            # Observação da transação (opcional)
+            if getattr(t, "observacao", None):
+                with st.expander("Observação", expanded=False):
+                    st.write(t.observacao)
+
             if st.session_state.transacao_para_excluir == t.id_transacao:
                 st.warning(f"Tem certeza que deseja excluir a transação '{t.descricao}'?")
                 col_confirm, col_cancel = st.columns(2)
@@ -229,6 +229,7 @@ with tab_transacoes:
                         st.rerun()
             st.divider()
 
+# --- CONTAS ---
 with tab_contas:
     st.header("Gerenciar Contas")
     col_contas1, col_contas2 = st.columns(2)
@@ -315,7 +316,7 @@ with tab_contas:
                                 attr_mudou = False
                                 if isinstance(conta, ContaCorrente):
                                     attr_mudou = conta.editar_limite(novo_limite)
-                                if nome_mudou or logo_mudou or attr_mudou:
+                                if nome_mudou or logo_mudou ou attr_mudou:
                                     st.session_state.gerenciador.salvar_dados()
                                     st.toast(f"Conta '{novo_nome}' atualizada!")
                                     st.rerun()
@@ -352,6 +353,7 @@ with tab_contas:
                 for conta in contas_investimento:
                     render_conta_com_confirmacao(conta)
 
+# --- CARTÕES ---
 with tab_cartoes:
     st.header("Gerenciar Cartões de Crédito")
     col_cartoes1, col_cartoes2 = st.columns(2)
@@ -400,7 +402,7 @@ with tab_cartoes:
                             id_cartao=id_cartao,
                             descricao=descricao_compra,
                             valor_total=valor_compra,
-                            data_compra=data_compra_cartao,  # data real da compra
+                            data_compra=data_compra_cartao,  # data real
                             categoria=categoria_compra,
                             num_parcelas=num_parcelas,
                             observacao=observacao_compra,
@@ -428,19 +430,31 @@ with tab_cartoes:
                         st.write("💳")
 
                 with expander_col:
-                    compras_abertas = st.session_state.gerenciador.obter_compras_fatura_aberta(cartao.id_cartao)
-                    valor_fatura_aberta = sum(c.valor for c in compras_abertas)
+                    # Data de referência do ciclo (por cartão)
+                    ref_key = f"ref_date_cartao_{cartao.id_cartao}"
+                    default_ref = st.session_state.get(ref_key) or date.today()
+                    ref_date = st.date_input(
+                        "Data de Referência do Ciclo",
+                        value=default_ref,
+                        format="DD/MM/YYYY",
+                        key=ref_key,
+                    )
+
+                    aberto_do_venc = st.session_state.gerenciador.obter_lancamentos_abertos_do_vencimento(cartao.id_cartao, ref_date)
+                    valor_fatura_aberta = sum(c.valor for c in aberto_do_venc)
+                    futuros = st.session_state.gerenciador.obter_lancamentos_futuros(cartao.id_cartao, ref_date)
                     faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
 
-                    with st.expander(f"{cartao.nome} - Fatura Aberta: {formatar_moeda(valor_fatura_aberta)}"):
-                        tab_aberta, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Histórico de Faturas"])
+                    with st.expander(f"{cartao.nome} - Fatura Aberta (ref {ref_date.strftime('%d/%m/%Y')}): {formatar_moeda(valor_fatura_aberta)}"):
+                        tab_aberta, tab_futuros, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Lançamentos Futuros", "Histórico de Faturas"])
 
+                        # Abas: Em Aberto (ciclo atual)
                         with tab_aberta:
-                            st.metric("Total em Aberto", formatar_moeda(valor_fatura_aberta))
-                            if not compras_abertas:
-                                st.info("Nenhum lançamento em aberto para este cartão.")
+                            st.metric("Total em Aberto (Ciclo Atual)", formatar_moeda(valor_fatura_aberta))
+                            if not aberto_do_venc:
+                                st.info("Nenhum lançamento em aberto para o ciclo de vencimento atual.")
                             else:
-                                for compra in sorted(compras_abertas, key=lambda x: x.data_compra):
+                                for compra in sorted(aberto_do_venc, key=lambda x: x.data_compra):
                                     c1, c2 = st.columns([4, 1])
                                     venc_str = compra.data_compra.strftime("%d/%m/%Y")
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
@@ -450,6 +464,11 @@ with tab_cartoes:
                                         if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
                                             st.session_state.compra_para_excluir = compra.id_compra_original
                                             st.rerun()
+
+                                    # Observação (se houver)
+                                    if getattr(compra, "observacao", None):
+                                        with st.expander("Observação", expanded=False):
+                                            st.write(compra.observacao)
 
                                     if st.session_state.compra_para_excluir == compra.id_compra_original:
                                         st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
@@ -465,6 +484,7 @@ with tab_cartoes:
                                             st.rerun()
 
                             st.divider()
+                            # Fechar fatura (manual, usando datas reais dadas pelo usuário)
                             with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
                                 st.write("Fechar Fatura")
                                 col_form_f1, col_form_f2 = st.columns(2)
@@ -479,6 +499,24 @@ with tab_cartoes:
                                     else:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
 
+                        # Abas: Lançamentos Futuros
+                        with tab_futuros:
+                            total_futuro = sum(c.valor for c in futuros)
+                            st.metric("Total Futuro (Próximas Competências)", formatar_moeda(total_futuro))
+                            if not futuros:
+                                st.info("Nenhum lançamento futuro para este cartão.")
+                            else:
+                                for compra in sorted(futuros, key=lambda x: (x.data_compra.year, x.data_compra.month, x.data_compra.day)):
+                                    venc_str = compra.data_compra.strftime("%d/%m/%Y")
+                                    real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    st.text(f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}")
+
+                                    # Observação (se houver)
+                                    if getattr(compra, "observacao", None):
+                                        with st.expander("Observação", expanded=False):
+                                            st.write(compra.observacao)
+
+                        # Abas: Histórico de Faturas
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -500,6 +538,11 @@ with tab_cartoes:
                                                 venc_str = lanc.data_compra.strftime("%d/%m/%Y")
                                                 real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
+
+                                                # Observação (se houver)
+                                                if getattr(lanc, "observacao", None):
+                                                    with st.expander("Observação", expanded=False):
+                                                        st.write(lanc.observacao)
 
                                     if fatura.status == "Fechada":
                                         with fatura_col2:
@@ -553,6 +596,7 @@ with tab_cartoes:
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
 
+# --- CONFIGURAÇÕES ---
 with tab_config:
     st.header("Configurações Gerais")
     st.subheader("Gerenciar Categorias")
