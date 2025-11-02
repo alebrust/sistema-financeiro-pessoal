@@ -306,27 +306,55 @@ with tab_contas:
                                 met2.metric("Valor Atual em Ativos", formatar_moeda(pos["total_valor_atual_ativos"]))
                                 met3.metric("Patrimônio Atualizado", formatar_moeda(pos["patrimonio_atualizado"]))
 
-                                st.caption("Detalhe por ativo:")
-                                for item in pos["ativos"]:
-                                    linha1, linha2, linha3 = st.columns([3, 3, 3])
-                                    with linha1:
-                                        st.write(f"• {item['ticker']} ({item['tipo']}) — Qtde: {item['quantidade']:.6f}")
-                                        st.write(f"  Preço médio: {formatar_moeda(item['preco_medio'])}")
-                                    with linha2:
-                                        if item["preco_atual"] is not None:
-                                            st.write(f"Preço atual: {formatar_moeda(item['preco_atual'])}")
-                                            st.write(f"Valor atual: {formatar_moeda(item['valor_atual'])}")
-                                        else:
-                                            st.write("Preço atual: indisponível")
-                                            st.write("Valor atual: —")
-                                    with linha3:
-                                        if item["pl"] is not None:
-                                            cor = "green" if item["pl"] >= 0 else "red"
-                                            pl_abs = formatar_moeda(item["pl"])
-                                            pl_pct = f"{item['pl_pct']:.2f}%"
-                                            st.markdown(f"<p style='color:{cor};'>P/L: {pl_abs} ({pl_pct})</p>", unsafe_allow_html=True)
-                                        else:
-                                            st.write("P/L: —")
+                                import math
+import pandas as pd
+import streamlit as st
+
+st.caption("Detalhe por ativo:")
+
+linhas = []
+for item in pos.get("ativos", []):
+    # Converte None para NaN onde for numérico, para o DataFrame lidar melhor
+    preco_atual = item.get("preco_atual", None)
+    valor_atual = item.get("valor_atual", None)
+    pl_abs = item.get("pl", None)
+    pl_pct = item.get("pl_pct", None)
+
+    preco_atual = float(preco_atual) if preco_atual is not None else math.nan
+    valor_atual = float(valor_atual) if valor_atual is not None else math.nan
+    pl_abs = float(pl_abs) if pl_abs is not None else math.nan
+    pl_pct = float(pl_pct) if pl_pct is not None else math.nan
+
+    linhas.append({
+        "Ticker": item.get("ticker", ""),
+        "Tipo": item.get("tipo", ""),
+        "Quantidade": float(item.get("quantidade", 0.0) or 0.0),
+        "Preço Médio": float(item.get("preco_medio", 0.0) or 0.0),
+        "Preço Atual": preco_atual,
+        "Valor Atual": valor_atual,
+        "P/L (R$)": pl_abs,
+        "P/L (%)": pl_pct,  # valor numérico (ex.: 5.23 será mostrado como 5,23%)
+    })
+
+df = pd.DataFrame(linhas)
+
+# Garante a ordem das colunas
+colunas = ["Ticker", "Tipo", "Quantidade", "Preço Médio", "Preço Atual", "Valor Atual", "P/L (R$)", "P/L (%)"]
+df = df[colunas] if not df.empty else pd.DataFrame(columns=colunas)
+
+st.dataframe(
+    df,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "Quantidade": st.column_config.NumberColumn(format="%.6f"),
+        "Preço Médio": st.column_config.NumberColumn(format="R$ %.2f"),
+        "Preço Atual": st.column_config.NumberColumn(format="R$ %.2f"),
+        "Valor Atual": st.column_config.NumberColumn(format="R$ %.2f"),
+        "P/L (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+        "P/L (%)": st.column_config.NumberColumn(format="%.2f%%"),
+    }
+)
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
