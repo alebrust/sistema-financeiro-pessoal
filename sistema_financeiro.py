@@ -2,13 +2,12 @@ import json
 import os
 import calendar
 import time
-import yfinance as yf
-from functools import lru_cache
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict, Any, Tuple
 from dateutil.relativedelta import relativedelta
+import yfinance as yf
 
 
 def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
@@ -310,8 +309,6 @@ class GerenciadorContas:
         self.cartoes_credito: List[CartaoCredito] = []
         self.compras_cartao: List[CompraCartao] = []
         self.faturas: List[Fatura] = []
-        self._cotacoes_cache = {}  # {(symbol): {"preco": float, "ts": epoch_seconds}}
-        self._cotacoes_ttl = 60    # segundos de validade do cache por símbolo
         self.categorias: List[str] = [
             "Alimentação",
             "Transporte",
@@ -323,146 +320,14 @@ class GerenciadorContas:
             "Investimentos",
             "Outros",
         ]
+        # Cache simples de cotações (sessão do app)
+        self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
+        self._cotacoes_ttl: int = 60  # segundos
         self.carregar_dados()
 
-
-    def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
-    """
-    Converte o ticker para o formato esperado pelo provedor:
-    - Ação BR / FII: acrescenta '.SA' se não tiver sufixo
-    - Cripto: mapear 'BTC' -> 'BTC-USD' (ou se já vier com '-USD', mantém)
-    - Ação EUA: mantém como está (ex.: AAPL)
-    - Outro: devolve como informado
-    """
-    t = (ticker or "").upper().strip()
-    if tipo_ativo in ("Ação BR", "FII"):
-        if not t.endswith(".SA"):
-            t = f"{t}.SA"
-    elif tipo_ativo == "Cripto":
-        if not t.endswith("-USD"):
-            t = f"{t}-USD"
-    # Ação EUA / Outro: sem mudanças
-    return t
-
-    def _agora_epoch(self) -> float:
-    return time.time()
-
-def _obter_preco_yf(self, symbol: str) -> float:
-    """
-    Obtém o último preço via yfinance com múltiplas tentativas de fonte:
-    - fast_info.last_price
-    - history(period='1d') último close
-    - info['regularMarketPrice'] (fallback)
-    Retorna float ou levanta ValueError se indisponível.
-    """
-    tk = yf.Ticker(symbol)
-
-    # 1) fast_info (rápido)
-    try:
-        fi = getattr(tk, "fast_info", None)
-        if fi:
-            last = fi.get("last_price") or fi.get("lastPrice")
-            if last is None:
-                # alguns ativos usam 'last_price' (snake_case)
-                last = fi.get("last_price")
-            if last is not None and float(last) > 0:
-                return float(last)
-    except Exception:
-        pass
-
-    # 2) history (robusto, mas um pouco mais pesado)
-    try:
-        hist = tk.history(period="1d")
-        if hist is not None and not hist.empty:
-            # usa 'Close' do último ponto
-            last = hist["Close"].iloc[-1]
-            if last is not None and float(last) > 0:
-                return float(last)
-    except Exception:
-        pass
-
-    # 3) info (lento; último fallback)
-    try:
-        info = tk.info or {}
-        last = info.get("regularMarketPrice")
-        if last is not None and float(last) > 0:
-            return float(last)
-    except Exception:
-        pass
-
-    raise ValueError(f"Cotação indisponível para {symbol}")
-
-def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
-    """
-    Retorna o preço atual (float) ou None se não disponível.
-    Usa cache em memória por TTL para evitar chamadas excessivas.
-    """
-    symbol = self._normalizar_ticker(ticker, tipo_ativo)
-    now = self._agora_epoch()
-    cached = self._cotacoes_cache.get(symbol)
-    if cached and (now - cached["ts"] <= self._cotacoes_ttl):
-        return cached["preco"]
-
-    try:
-        preco = self._obter_preco_yf(symbol)
-        self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
-        return preco
-    except Exception:
-        return None
-
-    def calcular_posicao_conta_investimento(self, id_conta: str) -> Optional[Dict[str, Any]]:
-    """
-    Calcula, para uma ContaInvestimento:
-    - preço atual por ativo (quando disponível)
-    - valor atual por ativo
-    - custo (preço_medio * quantidade)
-    - P/L absoluto e percentual por ativo
-    - somatórios e patrimônio atualizado (caixa + valor_atual_dos_ativos)
-    """
-    conta = self.buscar_conta_por_id(id_conta)
-    if not conta or not isinstance(conta, ContaInvestimento):
-        return None
-
-    ativos_resumo = []
-    total_valor_atual = 0.0
-    total_custo = 0.0
-
-    for a in conta.ativos:
-        preco_atual = self.obter_preco_atual(a.ticker, a.tipo_ativo)
-        custo = a.preco_medio * a.quantidade
-        total_custo += custo
-
-        if preco_atual is not None:
-            valor_atual = preco_atual * a.quantidade
-            pl = valor_atual - custo
-            pl_pct = (pl / custo * 100.0) if custo > 0 else 0.0
-            total_valor_atual += valor_atual
-        else:
-            valor_atual = None
-            pl = None
-            pl_pct = None
-
-        ativos_resumo.append({
-            "ticker": a.ticker,
-            "tipo": a.tipo_ativo,
-            "quantidade": a.quantidade,
-            "preco_medio": a.preco_medio,
-            "preco_atual": preco_atual,
-            "valor_atual": valor_atual,
-            "custo": custo,
-            "pl": pl,
-            "pl_pct": pl_pct,
-        })
-
-    patrimonio_atualizado = conta.saldo_caixa + total_valor_atual
-    return {
-        "conta": conta.nome,
-        "saldo_caixa": conta.saldo_caixa,
-        "ativos": ativos_resumo,
-        "total_valor_atual_ativos": total_valor_atual,
-        "total_custo_ativos": total_custo,
-        "patrimonio_atualizado": patrimonio_atualizado,
-    }
+    # ------------------------
+    # Persistência
+    # ------------------------
 
     def salvar_dados(self) -> None:
         data = {
@@ -582,15 +447,10 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
             self.categorias = cats
 
     # ------------------------
-    # Utilidades de Ciclos
+    # Utilidades de Ciclos (Cartões)
     # ------------------------
 
     def _calcular_mes_ano_fatura_aberta(self, cartao: CartaoCredito, data_ref: Optional[date] = None) -> Tuple[int, int]:
-        """
-        Vencimento do ciclo "aberto" considerando uma data de referência (ou hoje).
-        Se data_ref <= dia_fechamento do mês → vence no mês + 1
-        Caso contrário → vence no mês + 2
-        """
         hoje = data_ref or date.today()
         try:
             fechamento_atual = date(hoje.year, hoje.month, cartao.dia_fechamento)
@@ -612,9 +472,6 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         return vencimento.year, vencimento.month
 
     def ciclos_abertos_unicos(self, id_cartao: str) -> List[Tuple[int, int]]:
-        """
-        Lista de ciclos (ano, mes) presentes em compras sem fatura (id_fatura None), ordenada ascendente.
-        """
         ciclos = {
             (c.data_compra.year, c.data_compra.month)
             for c in self.compras_cartao
@@ -623,18 +480,10 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         return sorted(list(ciclos))
 
     def ciclo_aberto_mais_antigo(self, id_cartao: str) -> Optional[Tuple[int, int]]:
-        """
-        Retorna o ciclo em aberto mais antigo, se existir.
-        """
         ciclos = self.ciclos_abertos_unicos(id_cartao)
         return ciclos[0] if ciclos else None
 
     def listar_ciclos_navegacao(self, id_cartao: str, data_ref: Optional[date] = None) -> List[Tuple[int, int]]:
-        """
-        Retorna a lista de ciclos para navegação:
-        - Todos os ciclos com lançamentos sem fatura (abertos), ASC
-        - Garante incluir o ciclo "corrente" calculado por data_ref (ou hoje), mesmo que não haja lançamentos nele
-        """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return []
@@ -646,9 +495,6 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         return base
 
     def obter_lancamentos_do_ciclo(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
-        """
-        Lançamentos sem fatura cujo vencimento é exatamente o ciclo (ano, mes) indicado.
-        """
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -656,9 +502,6 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         ]
 
     def obter_lancamentos_futuros_desde(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
-        """
-        Lançamentos sem fatura com vencimento após o ciclo (ano, mes) indicado.
-        """
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -666,7 +509,7 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         ]
 
     # ------------------------
-    # Operações
+    # Operações de Contas e Ativos
     # ------------------------
 
     def adicionar_conta(self, conta: Conta) -> None:
@@ -805,6 +648,120 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         )
         return True
 
+    # ------------------------
+    # Cotações e Posição (Investimentos)
+    # ------------------------
+
+    def _agora_epoch(self) -> float:
+        return time.time()
+
+    def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
+        t = (ticker or "").upper().strip()
+        if tipo_ativo in ("Ação BR", "FII"):
+            if not t.endswith(".SA"):
+                t = f"{t}.SA"
+        elif tipo_ativo == "Cripto":
+            if not t.endswith("-USD"):
+                t = f"{t}-USD"
+        return t
+
+    def _obter_preco_yf(self, symbol: str) -> float:
+        tk = yf.Ticker(symbol)
+
+        try:
+            fi = getattr(tk, "fast_info", None)
+            if fi:
+                last = fi.get("last_price") or fi.get("lastPrice")
+                if last is None:
+                    last = fi.get("last_price")
+                if last is not None and float(last) > 0:
+                    return float(last)
+        except Exception:
+            pass
+
+        try:
+            hist = tk.history(period="1d")
+            if hist is not None and not hist.empty:
+                last = hist["Close"].iloc[-1]
+                if last is not None and float(last) > 0:
+                    return float(last)
+        except Exception:
+            pass
+
+        try:
+            info = tk.info or {}
+            last = info.get("regularMarketPrice")
+            if last is not None and float(last) > 0:
+                return float(last)
+        except Exception:
+            pass
+
+        raise ValueError(f"Cotação indisponível para {symbol}")
+
+    def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
+        symbol = self._normalizar_ticker(ticker, tipo_ativo)
+        now = self._agora_epoch()
+        cached = self._cotacoes_cache.get(symbol)
+        if cached and (now - cached["ts"] <= self._cotacoes_ttl):
+            return cached["preco"]
+
+        try:
+            preco = self._obter_preco_yf(symbol)
+            self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
+            return preco
+        except Exception:
+            return None
+
+    def calcular_posicao_conta_investimento(self, id_conta: str) -> Optional[Dict[str, Any]]:
+        conta = self.buscar_conta_por_id(id_conta)
+        if not conta or not isinstance(conta, ContaInvestimento):
+            return None
+
+        ativos_resumo: List[Dict[str, Any]] = []
+        total_valor_atual = 0.0
+        total_custo = 0.0
+
+        for a in conta.ativos:
+            preco_atual = self.obter_preco_atual(a.ticker, a.tipo_ativo)
+            custo = a.preco_medio * a.quantidade
+            total_custo += custo
+
+            if preco_atual is not None:
+                valor_atual = preco_atual * a.quantidade
+                pl = valor_atual - custo
+                pl_pct = (pl / custo * 100.0) if custo > 0 else 0.0
+                total_valor_atual += valor_atual
+            else:
+                valor_atual = None
+                pl = None
+                pl_pct = None
+
+            ativos_resumo.append({
+                "ticker": a.ticker,
+                "tipo": a.tipo_ativo,
+                "quantidade": a.quantidade,
+                "preco_medio": a.preco_medio,
+                "preco_atual": preco_atual,
+                "valor_atual": valor_atual,
+                "custo": custo,
+                "pl": pl,
+                "pl_pct": pl_pct,
+            })
+
+        patrimonio_atualizado = conta.saldo_caixa + total_valor_atual
+        return {
+            "conta": conta.nome,
+            "saldo_caixa": conta.saldo_caixa,
+            "ativos": ativos_resumo,
+            "total_valor_atual_ativos": total_valor_atual,
+            "total_custo_ativos": total_custo,
+            "patrimonio_atualizado": patrimonio_atualizado,
+        }
+
+    # ------------------------
+    # Cartões
+    # ------------------------
+
     def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]:
         return next((c for c in self.cartoes_credito if c.id_cartao == id_cartao), None)
 
@@ -821,7 +778,6 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         return True
 
     def obter_compras_fatura_aberta(self, id_cartao: str) -> List[CompraCartao]:
-        # Retrocompatível: retorna tudo em aberto (id_fatura None)
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -832,7 +788,7 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         id_cartao: str,
         descricao: str,
         valor_total: float,
-        data_compra: date,  # data real da compra (vinda do formulário)
+        data_compra: date,  # data real da compra
         categoria: str,
         num_parcelas: int = 1,
         observacao: str = "",
@@ -879,6 +835,11 @@ def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
             self.compras_cartao.append(nova)
 
         return True
+
+    def remover_compra_cartao(self, id_compra_original: str) -> None:
+        self.compras_cartao = [
+            c for c in self.compras_cartao if c.id_compra_original != id_compra_original
+        ]
 
     def fechar_fatura(
         self,
