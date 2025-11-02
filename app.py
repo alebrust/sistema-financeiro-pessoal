@@ -282,7 +282,7 @@ with tab_contas:
                         if isinstance(conta, ContaCorrente):
                             st.write(f"Limite: {formatar_moeda(conta.limite_cheque_especial)}")
                         elif isinstance(conta, ContaInvestimento):
-                            # Métricas base
+                            # Métricas base (preço médio)
                             st.metric("Patrimônio Consolidado (preço médio)", formatar_moeda(conta.saldo))
                             col_caixa, col_ativos = st.columns(2)
                             col_caixa.metric("Saldo em Caixa", formatar_moeda(conta.saldo_caixa))
@@ -332,7 +332,7 @@ with tab_contas:
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
 
                             st.divider()
-                            # Lista simples dos ativos conforme cadastro (preço médio)
+                            # Lista base (preço médio)
                             if conta.ativos:
                                 st.write("Ativos (base de custo):")
                                 df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
@@ -569,7 +569,7 @@ with tab_cartoes:
                                         with st.expander("Observação", expanded=False):
                                             st.write(compra.observacao)
 
-                                                with tab_fechadas:
+                        with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
                             else:
@@ -591,7 +591,6 @@ with tab_cartoes:
                                                 real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
-                                                # Observação (se houver) — ATENÇÃO: parênteses e bloco fechados corretamente
                                                 if getattr(lanc, "observacao", None):
                                                     with st.expander("Observação", expanded=False):
                                                         st.write(lanc.observacao)
@@ -647,3 +646,32 @@ with tab_cartoes:
                         if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
+
+# --- CONFIGURAÇÕES ---
+with tab_config:
+    st.header("Configurações Gerais")
+    st.subheader("Gerenciar Categorias")
+    col_cat1, col_cat2 = st.columns(2)
+
+    with col_cat1:
+        st.write("Categorias existentes:")
+        categorias = st.session_state.gerenciador.categorias
+        if not categorias:
+            st.info("Nenhuma categoria cadastrada.")
+        else:
+            for cat in categorias:
+                cat_col1, cat_col2 = st.columns([4, 1])
+                cat_col1.write(f"- {cat}")
+                if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
+                    st.session_state.gerenciador.remover_categoria(cat)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.rerun()
+
+    with col_cat2:
+        with st.form("add_category_form", clear_on_submit=True):
+            nova_categoria = st.text_input("Nova Categoria")
+            if st.form_submit_button("Adicionar Categoria"):
+                if nova_categoria and nova_categoria.strip():
+                    st.session_state.gerenciador.adicionar_categoria(nova_categoria)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.rerun()
