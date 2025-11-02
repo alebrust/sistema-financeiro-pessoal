@@ -205,7 +205,6 @@ with tab_transacoes:
                     st.session_state.transacao_para_excluir = t.id_transacao
                     st.rerun()
 
-            # Observação da transação (opcional)
             if getattr(t, "observacao", None):
                 with st.expander("Observação", expanded=False):
                     st.write(t.observacao)
@@ -283,61 +282,72 @@ with tab_contas:
                         if isinstance(conta, ContaCorrente):
                             st.write(f"Limite: {formatar_moeda(conta.limite_cheque_especial)}")
                         elif isinstance(conta, ContaInvestimento):
-                            st.metric("Patrimônio Consolidado", formatar_moeda(conta.saldo))
+                            # Métricas base
+                            st.metric("Patrimônio Consolidado (preço médio)", formatar_moeda(conta.saldo))
                             col_caixa, col_ativos = st.columns(2)
                             col_caixa.metric("Saldo em Caixa", formatar_moeda(conta.saldo_caixa))
-                            col_ativos.metric("Valor em Ativos", formatar_moeda(conta.valor_em_ativos))
+                            col_ativos.metric("Valor em Ativos (preço médio)", formatar_moeda(conta.valor_em_ativos))
+
                             st.divider()
-                            if not conta.ativos:
+                            st.write("Cotações e Posição Atual")
+
+                            col_btn, _ = st.columns([1, 5])
+                            with col_btn:
+                                if st.button("Atualizar cotações", key=f"upd_quotes_{conta.id_conta}"):
+                                    st.session_state.gerenciador._cotacoes_cache = {}
+                                    st.rerun()
+
+                            pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+                            if not pos or not pos["ativos"]:
                                 st.info("Nenhum ativo nesta conta ainda.")
                             else:
+                                met1, met2, met3 = st.columns(3)
+                                met1.metric("Saldo em Caixa", formatar_moeda(pos["saldo_caixa"]))
+                                met2.metric("Valor Atual em Ativos", formatar_moeda(pos["total_valor_atual_ativos"]))
+                                met3.metric("Patrimônio Atualizado", formatar_moeda(pos["patrimonio_atualizado"]))
+
+                                st.caption("Detalhe por ativo:")
+                                for item in pos["ativos"]:
+                                    linha1, linha2, linha3 = st.columns([3, 3, 3])
+                                    with linha1:
+                                        st.write(f"• {item['ticker']} ({item['tipo']}) — Qtde: {item['quantidade']:.6f}")
+                                        st.write(f"  Preço médio: {formatar_moeda(item['preco_medio'])}")
+                                    with linha2:
+                                        if item["preco_atual"] is not None:
+                                            st.write(f"Preço atual: {formatar_moeda(item['preco_atual'])}")
+                                            st.write(f"Valor atual: {formatar_moeda(item['valor_atual'])}")
+                                        else:
+                                            st.write("Preço atual: indisponível")
+                                            st.write("Valor atual: —")
+                                    with linha3:
+                                        if item["pl"] is not None:
+                                            cor = "green" if item["pl"] >= 0 else "red"
+                                            pl_abs = formatar_moeda(item["pl"])
+                                            pl_pct = f"{item['pl_pct']:.2f}%"
+                                            st.markdown(f"<p style='color:{cor};'>P/L: {pl_abs} ({pl_pct})</p>", unsafe_allow_html=True)
+                                        else:
+                                            st.write("P/L: —")
+
                                 st.divider()
-st.write("Cotações e Posição Atual")
+                                st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
 
-# Botão para atualizar cotações (força recálculo e invalida cache local da sessão)
-col_btn, _ = st.columns([1, 5])
-with col_btn:
-    if st.button("Atualizar cotações", key=f"upd_quotes_{conta.id_conta}"):
-        # limpamos o cache de cotações do gerenciador para forçar nova busca
-        st.session_state.gerenciador._cotacoes_cache = {}
-        st.rerun()
+                            st.divider()
+                            # Lista simples dos ativos conforme cadastro (preço médio)
+                            if conta.ativos:
+                                st.write("Ativos (base de custo):")
+                                df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
+                                df_ativos["valor_total"] = df_ativos.apply(
+                                    lambda row: row["quantidade"] * row["preco_medio"], axis=1
+                                )
+                                df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
+                                df_ativos["valor_total"] = df_ativos["valor_total"].apply(formatar_moeda)
+                                st.dataframe(
+                                    df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]],
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
 
-# Calcula posição com preços atuais
-pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
-if not pos or not pos["ativos"]:
-    st.info("Nenhum ativo nesta conta ainda.")
-else:
-    # Métricas de topo
-    met1, met2, met3 = st.columns(3)
-    met1.metric("Saldo em Caixa", formatar_moeda(pos["saldo_caixa"]))
-    met2.metric("Valor Atual em Ativos", formatar_moeda(pos["total_valor_atual_ativos"]))
-    met3.metric("Patrimônio Atualizado", formatar_moeda(pos["patrimonio_atualizado"]))
-
-    st.caption("Detalhe por ativo:")
-
-    for item in pos["ativos"]:
-        linha1, linha2, linha3 = st.columns([3, 3, 3])
-        with linha1:
-            st.write(f"• {item['ticker']} ({item['tipo']}) — Qtde: {item['quantidade']:.6f}")
-            st.write(f"  Preço médio: {formatar_moeda(item['preco_medio'])}")
-        with linha2:
-            if item["preco_atual"] is not None:
-                st.write(f"Preço atual: {formatar_moeda(item['preco_atual'])}")
-                st.write(f"Valor atual: {formatar_moeda(item['valor_atual'])}")
-            else:
-                st.write("Preço atual: indisponível")
-                st.write("Valor atual: —")
-        with linha3:
-            if item["pl"] is not None:
-                cor = "green" if item["pl"] >= 0 else "red"
-                pl_abs = formatar_moeda(item["pl"])
-                pl_pct = f"{item['pl_pct']:.2f}%"
-                st.markdown(f"<p style='color:{cor};'>P/L: {pl_abs} ({pl_pct})</p>", unsafe_allow_html=True)
-            else:
-                st.write("P/L: —")
-
-    st.divider()
-    st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
+                        st.divider()
                         with st.form(f"edit_form_{conta.id_conta}"):
                             novo_nome = st.text_input("Nome", value=conta.nome)
                             nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
@@ -465,17 +475,12 @@ with tab_cartoes:
                         st.write("💳")
 
                 with expander_col:
-                    # Ciclos disponíveis: todos os ciclos abertos + ciclo "corrente"
                     ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao)
                     if not ciclos:
-                        # fallback: inclui ciclo corrente
                         hoje = date.today()
                         ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao, hoje)
 
-                    # Seleção padrão: ciclo aberto mais antigo (se houver), senão o primeiro da lista
                     padrao = st.session_state.gerenciador.ciclo_aberto_mais_antigo(cartao.id_cartao) or ciclos[0]
-
-                    # Mapeia rótulos MM/YYYY -> (ano, mes)
                     labels = [f"{mes:02d}/{ano}" for (ano, mes) in ciclos]
                     idx_padrao = ciclos.index(padrao) if padrao in ciclos else 0
 
@@ -488,7 +493,6 @@ with tab_cartoes:
                     sel_idx = labels.index(sel_label)
                     sel_ano, sel_mes = ciclos[sel_idx]
 
-                    # Dados do ciclo selecionado
                     aberto_do_ciclo = st.session_state.gerenciador.obter_lancamentos_do_ciclo(cartao.id_cartao, sel_ano, sel_mes)
                     valor_fatura_aberta = sum(c.valor for c in aberto_do_ciclo)
                     futuros = st.session_state.gerenciador.obter_lancamentos_futuros_desde(cartao.id_cartao, sel_ano, sel_mes)
@@ -497,7 +501,6 @@ with tab_cartoes:
                     with st.expander(f"{cartao.nome} - Fatura Aberta ({sel_label}): {formatar_moeda(valor_fatura_aberta)}"):
                         tab_aberta, tab_futuros, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Lançamentos Futuros", "Histórico de Faturas"])
 
-                        # Em Aberto (somente ciclo selecionado)
                         with tab_aberta:
                             st.metric("Total em Aberto (Ciclo Selecionado)", formatar_moeda(valor_fatura_aberta))
                             if not aberto_do_ciclo:
@@ -514,7 +517,6 @@ with tab_cartoes:
                                             st.session_state.compra_para_excluir = compra.id_compra_original
                                             st.rerun()
 
-                                    # Observação (se houver)
                                     if getattr(compra, "observacao", None):
                                         with st.expander("Observação", expanded=False):
                                             st.write(compra.observacao)
@@ -533,13 +535,9 @@ with tab_cartoes:
                                             st.rerun()
 
                             st.divider()
-                            # Fechar fatura (datas reais definidas pelo usuário)
                             with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
                                 st.write("Fechar Fatura")
                                 col_form_f1, col_form_f2 = st.columns(2)
-                                # Sugere datas coerentes com o ciclo selecionado
-                                data_venc_sugerida = date(sel_ano, sel_mes, 1)
-                                # Ajuste: define dia como 10 (ou o que preferir) apenas como sugestão
                                 try:
                                     data_venc_sugerida = date(sel_ano, sel_mes, 10)
                                 except Exception:
@@ -556,7 +554,6 @@ with tab_cartoes:
                                     else:
                                         st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
 
-                        # Futuros (após o ciclo selecionado)
                         with tab_futuros:
                             total_futuro = sum(c.valor for c in futuros)
                             st.metric("Total Futuro (Próximas Competências)", formatar_moeda(total_futuro))
@@ -572,7 +569,6 @@ with tab_cartoes:
                                         with st.expander("Observação", expanded=False):
                                             st.write(compra.observacao)
 
-                        # Histórico de faturas fechadas (inalterado, só exibição da observação por lançamento)
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -596,86 +592,4 @@ with tab_cartoes:
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
                                                 if getattr(lanc, "observacao", None):
-                                                    with st.expander("Observação", expanded=False):
-                                                        st.write(lanc.observacao)
-
-                                    if fatura.status == "Fechada":
-                                        with fatura_col2:
-                                            if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
-                                                st.session_state.fatura_para_pagar = fatura.id_fatura
-                                                st.rerun()
-                                    else:
-                                        fatura_col2.success("Paga")
-
-                                    if st.session_state.fatura_para_pagar == fatura.id_fatura:
-                                        with st.form(f"pay_bill_form_{fatura.id_fatura}"):
-                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
-                                            contas_correntes_pagamento = [
-                                                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
-                                            ]
-                                            conta_pagamento_nome = st.selectbox("Pagar com a conta:", [c.nome for c in contas_correntes_pagamento])
-                                            data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
-                                            if st.form_submit_button("Confirmar Pagamento"):
-                                                id_conta_pagamento = next(
-                                                    (c.id_conta for c in contas_correntes_pagamento if c.nome == conta_pagamento_nome), None
-                                                )
-                                                sucesso = st.session_state.gerenciador.pagar_fatura(fatura.id_fatura, id_conta_pagamento, data_pagamento)
-                                                if sucesso:
-                                                    st.session_state.gerenciador.salvar_dados()
-                                                    st.toast("Fatura paga com sucesso!")
-                                                    st.session_state.fatura_para_pagar = None
-                                                    st.rerun()
-                                                else:
-                                                    st.error("Pagamento falhou. Saldo insuficiente.")
-                                        if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
-                                            st.session_state.fatura_para_pagar = None
-                                            st.rerun()
-
-                        st.divider()
-                        if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
-                            st.session_state.cartao_para_excluir = cartao.id_cartao
-                            st.rerun()
-
-                if st.session_state.cartao_para_excluir == cartao.id_cartao:
-                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
-                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
-                    with col_confirm:
-                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_card_{cartao.id_cartao}", type="primary"):
-                            if st.session_state.gerenciador.remover_cartao_credito(cartao.id_cartao):
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"Cartão '{cartao.nome}' removido!")
-                                st.session_state.cartao_para_excluir = None
-                                st.rerun()
-                    with col_cancel:
-                        if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
-                            st.session_state.cartao_para_excluir = None
-                            st.rerun()
-
-# --- CONFIGURAÇÕES ---
-with tab_config:
-    st.header("Configurações Gerais")
-    st.subheader("Gerenciar Categorias")
-    col_cat1, col_cat2 = st.columns(2)
-
-    with col_cat1:
-        st.write("Categorias existentes:")
-        categorias = st.session_state.gerenciador.categorias
-        if not categorias:
-            st.info("Nenhuma categoria cadastrada.")
-        else:
-            for cat in categorias:
-                cat_col1, cat_col2 = st.columns([4, 1])
-                cat_col1.write(f"- {cat}")
-                if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
-                    st.session_state.gerenciador.remover_categoria(cat)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.rerun()
-
-    with col_cat2:
-        with st.form("add_category_form", clear_on_submit=True):
-            nova_categoria = st.text_input("Nova Categoria")
-            if st.form_submit_button("Adicionar Categoria"):
-                if nova_categoria and nova_categoria.strip():
-                    st.session_state.gerenciador.adicionar_categoria(nova_categoria)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.rerun()
+                                                    with st.expander("Observação", 
