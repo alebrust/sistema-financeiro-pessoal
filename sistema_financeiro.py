@@ -233,7 +233,7 @@ class CompraCartao:
         id_cartao: str,
         descricao: str,
         valor: float,
-        data_compra: date,  # neste sistema, é a data de vencimento da parcela
+        data_compra: date,  # data de vencimento da parcela
         categoria: str,
         total_parcelas: int = 1,
         parcela_atual: int = 1,
@@ -320,7 +320,7 @@ class GerenciadorContas:
             "Investimentos",
             "Outros",
         ]
-        # Cache simples de cotações (sessão do app)
+        # Cache de cotações
         self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
         self._cotacoes_ttl: int = 60  # segundos
         self.carregar_dados()
