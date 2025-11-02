@@ -291,18 +291,53 @@ with tab_contas:
                             if not conta.ativos:
                                 st.info("Nenhum ativo nesta conta ainda.")
                             else:
-                                st.write("Ativos em Carteira:")
-                                df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
-                                df_ativos["valor_total"] = df_ativos.apply(
-                                    lambda row: formatar_moeda(row["quantidade"] * row["preco_medio"]), axis=1
-                                )
-                                df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
-                                st.dataframe(
-                                    df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]],
-                                    use_container_width=True,
-                                    hide_index=True,
-                                )
-                        st.divider()
+                                st.divider()
+st.write("Cotações e Posição Atual")
+
+# Botão para atualizar cotações (força recálculo e invalida cache local da sessão)
+col_btn, _ = st.columns([1, 5])
+with col_btn:
+    if st.button("Atualizar cotações", key=f"upd_quotes_{conta.id_conta}"):
+        # limpamos o cache de cotações do gerenciador para forçar nova busca
+        st.session_state.gerenciador._cotacoes_cache = {}
+        st.rerun()
+
+# Calcula posição com preços atuais
+pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+if not pos or not pos["ativos"]:
+    st.info("Nenhum ativo nesta conta ainda.")
+else:
+    # Métricas de topo
+    met1, met2, met3 = st.columns(3)
+    met1.metric("Saldo em Caixa", formatar_moeda(pos["saldo_caixa"]))
+    met2.metric("Valor Atual em Ativos", formatar_moeda(pos["total_valor_atual_ativos"]))
+    met3.metric("Patrimônio Atualizado", formatar_moeda(pos["patrimonio_atualizado"]))
+
+    st.caption("Detalhe por ativo:")
+
+    for item in pos["ativos"]:
+        linha1, linha2, linha3 = st.columns([3, 3, 3])
+        with linha1:
+            st.write(f"• {item['ticker']} ({item['tipo']}) — Qtde: {item['quantidade']:.6f}")
+            st.write(f"  Preço médio: {formatar_moeda(item['preco_medio'])}")
+        with linha2:
+            if item["preco_atual"] is not None:
+                st.write(f"Preço atual: {formatar_moeda(item['preco_atual'])}")
+                st.write(f"Valor atual: {formatar_moeda(item['valor_atual'])}")
+            else:
+                st.write("Preço atual: indisponível")
+                st.write("Valor atual: —")
+        with linha3:
+            if item["pl"] is not None:
+                cor = "green" if item["pl"] >= 0 else "red"
+                pl_abs = formatar_moeda(item["pl"])
+                pl_pct = f"{item['pl_pct']:.2f}%"
+                st.markdown(f"<p style='color:{cor};'>P/L: {pl_abs} ({pl_pct})</p>", unsafe_allow_html=True)
+            else:
+                st.write("P/L: —")
+
+    st.divider()
+    st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
                         with st.form(f"edit_form_{conta.id_conta}"):
                             novo_nome = st.text_input("Nome", value=conta.nome)
                             nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
