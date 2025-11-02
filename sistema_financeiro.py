@@ -1,6 +1,9 @@
 import json
 import os
 import calendar
+import time
+import yfinance as yf
+from functools import lru_cache
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from datetime import date, datetime, timedelta
@@ -307,6 +310,8 @@ class GerenciadorContas:
         self.cartoes_credito: List[CartaoCredito] = []
         self.compras_cartao: List[CompraCartao] = []
         self.faturas: List[Fatura] = []
+        self._cotacoes_cache = {}  # {(symbol): {"preco": float, "ts": epoch_seconds}}
+        self._cotacoes_ttl = 60    # segundos de validade do cache por símbolo
         self.categorias: List[str] = [
             "Alimentação",
             "Transporte",
@@ -319,6 +324,145 @@ class GerenciadorContas:
             "Outros",
         ]
         self.carregar_dados()
+
+
+    def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
+    """
+    Converte o ticker para o formato esperado pelo provedor:
+    - Ação BR / FII: acrescenta '.SA' se não tiver sufixo
+    - Cripto: mapear 'BTC' -> 'BTC-USD' (ou se já vier com '-USD', mantém)
+    - Ação EUA: mantém como está (ex.: AAPL)
+    - Outro: devolve como informado
+    """
+    t = (ticker or "").upper().strip()
+    if tipo_ativo in ("Ação BR", "FII"):
+        if not t.endswith(".SA"):
+            t = f"{t}.SA"
+    elif tipo_ativo == "Cripto":
+        if not t.endswith("-USD"):
+            t = f"{t}-USD"
+    # Ação EUA / Outro: sem mudanças
+    return t
+
+    def _agora_epoch(self) -> float:
+    return time.time()
+
+def _obter_preco_yf(self, symbol: str) -> float:
+    """
+    Obtém o último preço via yfinance com múltiplas tentativas de fonte:
+    - fast_info.last_price
+    - history(period='1d') último close
+    - info['regularMarketPrice'] (fallback)
+    Retorna float ou levanta ValueError se indisponível.
+    """
+    tk = yf.Ticker(symbol)
+
+    # 1) fast_info (rápido)
+    try:
+        fi = getattr(tk, "fast_info", None)
+        if fi:
+            last = fi.get("last_price") or fi.get("lastPrice")
+            if last is None:
+                # alguns ativos usam 'last_price' (snake_case)
+                last = fi.get("last_price")
+            if last is not None and float(last) > 0:
+                return float(last)
+    except Exception:
+        pass
+
+    # 2) history (robusto, mas um pouco mais pesado)
+    try:
+        hist = tk.history(period="1d")
+        if hist is not None and not hist.empty:
+            # usa 'Close' do último ponto
+            last = hist["Close"].iloc[-1]
+            if last is not None and float(last) > 0:
+                return float(last)
+    except Exception:
+        pass
+
+    # 3) info (lento; último fallback)
+    try:
+        info = tk.info or {}
+        last = info.get("regularMarketPrice")
+        if last is not None and float(last) > 0:
+            return float(last)
+    except Exception:
+        pass
+
+    raise ValueError(f"Cotação indisponível para {symbol}")
+
+def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
+    """
+    Retorna o preço atual (float) ou None se não disponível.
+    Usa cache em memória por TTL para evitar chamadas excessivas.
+    """
+    symbol = self._normalizar_ticker(ticker, tipo_ativo)
+    now = self._agora_epoch()
+    cached = self._cotacoes_cache.get(symbol)
+    if cached and (now - cached["ts"] <= self._cotacoes_ttl):
+        return cached["preco"]
+
+    try:
+        preco = self._obter_preco_yf(symbol)
+        self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
+        return preco
+    except Exception:
+        return None
+
+    def calcular_posicao_conta_investimento(self, id_conta: str) -> Optional[Dict[str, Any]]:
+    """
+    Calcula, para uma ContaInvestimento:
+    - preço atual por ativo (quando disponível)
+    - valor atual por ativo
+    - custo (preço_medio * quantidade)
+    - P/L absoluto e percentual por ativo
+    - somatórios e patrimônio atualizado (caixa + valor_atual_dos_ativos)
+    """
+    conta = self.buscar_conta_por_id(id_conta)
+    if not conta or not isinstance(conta, ContaInvestimento):
+        return None
+
+    ativos_resumo = []
+    total_valor_atual = 0.0
+    total_custo = 0.0
+
+    for a in conta.ativos:
+        preco_atual = self.obter_preco_atual(a.ticker, a.tipo_ativo)
+        custo = a.preco_medio * a.quantidade
+        total_custo += custo
+
+        if preco_atual is not None:
+            valor_atual = preco_atual * a.quantidade
+            pl = valor_atual - custo
+            pl_pct = (pl / custo * 100.0) if custo > 0 else 0.0
+            total_valor_atual += valor_atual
+        else:
+            valor_atual = None
+            pl = None
+            pl_pct = None
+
+        ativos_resumo.append({
+            "ticker": a.ticker,
+            "tipo": a.tipo_ativo,
+            "quantidade": a.quantidade,
+            "preco_medio": a.preco_medio,
+            "preco_atual": preco_atual,
+            "valor_atual": valor_atual,
+            "custo": custo,
+            "pl": pl,
+            "pl_pct": pl_pct,
+        })
+
+    patrimonio_atualizado = conta.saldo_caixa + total_valor_atual
+    return {
+        "conta": conta.nome,
+        "saldo_caixa": conta.saldo_caixa,
+        "ativos": ativos_resumo,
+        "total_valor_atual_ativos": total_valor_atual,
+        "total_custo_ativos": total_custo,
+        "patrimonio_atualizado": patrimonio_atualizado,
+    }
 
     def salvar_dados(self) -> None:
         data = {
