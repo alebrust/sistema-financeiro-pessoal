@@ -329,19 +329,44 @@ with tab_contas:
                                 colunas = ["Ticker", "Tipo", "Quantidade", "Preço Médio", "Preço Atual", "Valor Atual", "P/L (R$)", "P/L (%)"]
                                 df = df[colunas] if not df.empty else pd.DataFrame(columns=colunas)
 
-                                st.dataframe(
-                                    df,
-                                    use_container_width=True,
-                                    hide_index=True,
-                                    column_config={
-                                        "Quantidade": st.column_config.NumberColumn(format="%.6f"),
-                                        "Preço Médio": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "Preço Atual": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "Valor Atual": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "P/L (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "P/L (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                                    }
+
+                                def _fmt_num6(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_moeda(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_pct(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"{v:.2f}%".replace(".", ",")
+                                
+                                def _cor_pl(val: float) -> str:
+                                    if pd.isna(val):
+                                        return ""
+                                    # Vermelho para negativo, azul escuro para positivo/zero
+                                    return "color: red;" if val < 0 else "color: #0b3d91;"
+                                
+                                styled = (
+                                    df.style
+                                      .format({
+                                          "Quantidade": _fmt_num6,
+                                          "Preço Médio": _fmt_moeda,
+                                          "Preço Atual": _fmt_moeda,
+                                          "Valor Atual": _fmt_moeda,
+                                          "P/L (R$)": _fmt_moeda,
+                                          "P/L (%)": _fmt_pct,
+                                      })
+                                      .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
+                                      .hide(axis="index")
                                 )
+                                
+                                st.dataframe(styled, use_container_width=True)
+                                
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
