@@ -569,7 +569,7 @@ with tab_cartoes:
                                         with st.expander("Observação", expanded=False):
                                             st.write(compra.observacao)
 
-                        with tab_fechadas:
+                                                with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
                             else:
@@ -591,5 +591,59 @@ with tab_cartoes:
                                                 real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
+                                                # Observação (se houver) — ATENÇÃO: parênteses e bloco fechados corretamente
                                                 if getattr(lanc, "observacao", None):
-                                                    with st.expander("Observação", 
+                                                    with st.expander("Observação", expanded=False):
+                                                        st.write(lanc.observacao)
+
+                                    if fatura.status == "Fechada":
+                                        with fatura_col2:
+                                            if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
+                                                st.session_state.fatura_para_pagar = fatura.id_fatura
+                                                st.rerun()
+                                    else:
+                                        fatura_col2.success("Paga")
+
+                                    if st.session_state.fatura_para_pagar == fatura.id_fatura:
+                                        with st.form(f"pay_bill_form_{fatura.id_fatura}"):
+                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
+                                            contas_correntes_pagamento = [
+                                                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
+                                            ]
+                                            conta_pagamento_nome = st.selectbox("Pagar com a conta:", [c.nome for c in contas_correntes_pagamento])
+                                            data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
+                                            if st.form_submit_button("Confirmar Pagamento"):
+                                                id_conta_pagamento = next(
+                                                    (c.id_conta for c in contas_correntes_pagamento if c.nome == conta_pagamento_nome), None
+                                                )
+                                                sucesso = st.session_state.gerenciador.pagar_fatura(fatura.id_fatura, id_conta_pagamento, data_pagamento)
+                                                if sucesso:
+                                                    st.session_state.gerenciador.salvar_dados()
+                                                    st.toast("Fatura paga com sucesso!")
+                                                    st.session_state.fatura_para_pagar = None
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Pagamento falhou. Saldo insuficiente.")
+                                        if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
+                                            st.session_state.fatura_para_pagar = None
+                                            st.rerun()
+
+                        st.divider()
+                        if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
+                            st.session_state.cartao_para_excluir = cartao.id_cartao
+                            st.rerun()
+
+                if st.session_state.cartao_para_excluir == cartao.id_cartao:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+                    with col_confirm:
+                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_card_{cartao.id_cartao}", type="primary"):
+                            if st.session_state.gerenciador.remover_cartao_credito(cartao.id_cartao):
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Cartão '{cartao.nome}' removido!")
+                                st.session_state.cartao_para_excluir = None
+                                st.rerun()
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
+                            st.session_state.cartao_para_excluir = None
+                            st.rerun()
