@@ -51,9 +51,21 @@ with tab_dashboard:
             if not contas_investimento:
                 st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
             else:
+                # Seleção robusta por ID (evita colisão de nomes)
+                def _label_conta_inv(c):
+                    return f"{c.nome} • Investimento • {c.id_conta[:6]}"
+
+                mapa_ci = {c.id_conta: (c, _label_conta_inv(c)) for c in contas_investimento}
+                ids_ci = list(mapa_ci.keys())
+
                 with st.form("buy_asset_form", clear_on_submit=True):
                     st.write("Registrar Compra de Ativo")
-                    conta_destino_nome = st.selectbox("Comprar na corretora:", [c.nome for c in contas_investimento])
+                    conta_destino_id = st.selectbox(
+                        "Comprar na corretora:",
+                        options=ids_ci,
+                        format_func=lambda cid: mapa_ci[cid][1],
+                        key="buy_asset_conta_destino_id"
+                    )
                     ticker = st.text_input("Ticker do Ativo (ex: PETR4, AAPL)").upper()
                     tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"])
                     col_qnt, col_preco = st.columns(2)
@@ -66,9 +78,8 @@ with tab_dashboard:
                         if not all([ticker, quantidade > 0, preco_unitario > 0]):
                             st.error("Preencha todos os detalhes da compra do ativo.")
                         else:
-                            id_destino = next((c.id_conta for c in contas_investimento if c.nome == conta_destino_nome), None)
                             sucesso = st.session_state.gerenciador.comprar_ativo(
-                                id_conta_destino=id_destino,
+                                id_conta_destino=conta_destino_id,
                                 ticker=ticker,
                                 quantidade=quantidade,
                                 preco_unitario=preco_unitario,
@@ -89,9 +100,21 @@ with tab_dashboard:
             if not contas_correntes:
                 st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
             else:
+                # Seleção robusta por ID (evita colisão de nomes)
+                def _label_cc(c):
+                    return f"{c.nome} • Corrente • {c.id_conta[:6]}"
+
+                mapa_cc = {c.id_conta: (c, _label_cc(c)) for c in contas_correntes}
+                ids_cc = list(mapa_cc.keys())
+
                 with st.form("new_transaction_form", clear_on_submit=True):
                     tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"])
-                    conta_selecionada_nome = st.selectbox("Conta Corrente", [c.nome for c in contas_correntes])
+                    conta_selecionada_id = st.selectbox(
+                        "Conta Corrente",
+                        options=ids_cc,
+                        format_func=lambda cid: mapa_cc[cid][1],
+                        key="tx_conta_corrente_id"
+                    )
                     descricao = st.text_input("Descrição")
                     categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
@@ -101,9 +124,8 @@ with tab_dashboard:
                         if not all([descricao, categoria]):
                             st.error("Descrição e Categoria são obrigatórios.")
                         else:
-                            conta_id = next((c.id_conta for c in contas_correntes if c.nome == conta_selecionada_nome), None)
                             sucesso = st.session_state.gerenciador.registrar_transacao(
-                                id_conta=conta_id,
+                                id_conta=conta_selecionada_id,
                                 descricao=descricao,
                                 valor=valor,
                                 tipo=tipo_transacao,
@@ -143,60 +165,74 @@ with tab_dashboard:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
+            with st.form("transfer_form", clear_on_submit=True):
+                contas = st.session_state.gerenciador.contas
 
-        with st.form("transfer_form", clear_on_submit=True):
-    contas = st.session_state.gerenciador.contas  # lista de contas em memória
+                # Remoção de chaves antigas baseadas em nome/índice para evitar conflitos
+                for legacy_key in ["transfer_origem", "transfer_destino"]:
+                    if legacy_key in st.session_state:
+                        del st.session_state[legacy_key]
 
-    # Mapeia cada conta para um par (id, label legível)
-    def _label_conta(c):
-        tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
-        return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
+                # Mapa id_conta -> (label amigável, objeto conta)
+                def _label_conta(c):
+                    tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
+                    return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
 
-    opcoes = [(c.id_conta, _label_conta(c)) for c in contas]
+                mapa = {c.id_conta: (_label_conta(c), c) for c in contas}
+                ids = list(mapa.keys())
 
-    if len(opcoes) < 2:
-        st.error("É necessário ter ao menos duas contas para transferir.")
-    else:
-        # Seleciona origem pelo índice (estável)
-        idx_origem = 0
-        conta_origem_id, conta_origem_label = st.selectbox(
-            "De:",
-            options=list(range(len(opcoes))),
-            format_func=lambda i: opcoes[i][1],
-            key="transfer_origem_idx"
-        ), None  # recebemos o índice; o label vem do array
+                # Formatador para os selectboxes que usam ID como value
+                def _fmt_by_id(cid: str) -> str:
+                    return mapa.get(cid, ("(desconhecida)", None))[0]
 
-        conta_origem_id = opcoes[st.session_state.transfer_origem_idx][0]
-        conta_origem_label = opcoes[st.session_state.transfer_origem_idx][1]
+                # Seleção da conta de origem por ID
+                conta_origem_id = st.selectbox(
+                    "De:",
+                    options=ids,
+                    format_func=_fmt_by_id,
+                    key="transfer_origem_id"
+                )
 
-        # Destino: todas as contas com ID diferente da origem
-        opcoes_destino = [(cid, lbl) for (cid, lbl) in opcoes if cid != conta_origem_id]
+                # Opções de destino: todas as contas exceto a origem
+                ids_destino = [cid for cid in ids if cid != conta_origem_id]
 
-        # Seleciona destino por índice dentro da lista filtrada
-        idx_destino = st.selectbox(
-            "Para:",
-            options=list(range(len(opcoes_destino))),
-            format_func=lambda i: opcoes_destino[i][1],
-            key="transfer_destino_idx"
-        )
-        conta_destino_id = opcoes_destino[idx_destino][0]
-        conta_destino_label = opcoes_destino[idx_destino][1]
+                conta_destino_id = st.selectbox(
+                    "Para:",
+                    options=ids_destino,
+                    format_func=_fmt_by_id,
+                    key="transfer_destino_id"
+                )
 
-        valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+                valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
 
-        # Opcional: informativo visual para conferir antes de enviar
-        st.caption(f"Origem: {conta_origem_label}")
-        st.caption(f"Destino: {conta_destino_label}")
+                # Informativo de conferência visual
+                st.caption(f"Origem: {_fmt_by_id(conta_origem_id)}")
+                st.caption(f"Destino: {_fmt_by_id(conta_destino_id)}")
 
-        if st.form_submit_button("Confirmar Transferência", use_container_width=True):
-            if st.session_state.gerenciador.realizar_transferencia(conta_origem_id, conta_destino_id, valor_transferencia):
-                st.session_state.gerenciador.salvar_dados()
-                st.success("Transferência realizada!")
-                st.rerun()
-            else:
-                st.error("Falha na transferência. Saldo insuficiente?")
+                # Alerta específico: Conta de Investimento precisa ter saldo_caixa suficiente
+                conta_origem_obj = mapa[conta_origem_id][1]
+                if isinstance(conta_origem_obj, ContaInvestimento):
+                    saldo_caixa_origem = float(conta_origem_obj.saldo_caixa)
+                    if valor_transferencia > saldo_caixa_origem:
+                        st.warning(
+                            f"Saldo em caixa insuficiente na corretora de origem. Caixa atual: "
+                            f"{formatar_moeda(saldo_caixa_origem)}. "
+                            f"Para transferir, é necessário ter saldo em caixa (não apenas em ativos)."
+                        )
 
-            
+                if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+                    ok = st.session_state.gerenciador.realizar_transferencia(
+                        conta_origem_id, conta_destino_id, valor_transferencia
+                    )
+                    if ok:
+                        st.session_state.gerenciador.salvar_dados()
+                        st.success("Transferência realizada!")
+                        st.rerun()
+                    else:
+                        if isinstance(conta_origem_obj, ContaCorrente):
+                            st.error("Falha na transferência. Saldo insuficiente na conta corrente (considerando o limite)?")
+                        else:
+                            st.error("Falha na transferência. Saldo em caixa insuficiente na conta de investimento de origem.")
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
@@ -360,7 +396,6 @@ with tab_contas:
                                 colunas = ["Ticker", "Tipo", "Quantidade", "Preço Médio", "Preço Atual", "Valor Atual", "P/L (R$)", "P/L (%)"]
                                 df = df[colunas] if not df.empty else pd.DataFrame(columns=colunas)
 
-
                                 def _fmt_num6(v: float) -> str:
                                     if pd.isna(v):
                                         return ""
@@ -397,7 +432,6 @@ with tab_contas:
                                 )
                                 
                                 st.dataframe(styled, use_container_width=True)
-                                
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
@@ -501,8 +535,20 @@ with tab_cartoes:
         if not cartoes_cadastrados:
             st.warning("Adicione um cartão de crédito para poder lançar compras.")
         else:
+            # Seleção robusta por ID (evita colisão de nomes)
+            def _label_cartao(c):
+                return f"{c.nome} • {c.id_cartao[:6]}"
+
+            mapa_cartao = {c.id_cartao: (c, _label_cartao(c)) for c in cartoes_cadastrados}
+            ids_cartao = list(mapa_cartao.keys())
+
             with st.form("add_card_purchase_form", clear_on_submit=True):
-                cartao_selecionado_nome = st.selectbox("Cartão Utilizado", [c.nome for c in cartoes_cadastrados])
+                cartao_selecionado_id = st.selectbox(
+                    "Cartão Utilizado",
+                    options=ids_cartao,
+                    format_func=lambda cid: mapa_cartao[cid][1],
+                    key="purchase_cartao_id"
+                )
                 descricao_compra = st.text_input("Descrição da Compra")
                 categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                 valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
@@ -513,9 +559,8 @@ with tab_cartoes:
                     if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                         st.error("Preencha todos os detalhes da compra.")
                     else:
-                        id_cartao = next((c.id_cartao for c in cartoes_cadastrados if c.nome == cartao_selecionado_nome), None)
                         sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                            id_cartao=id_cartao,
+                            id_cartao=cartao_selecionado_id,
                             descricao=descricao_compra,
                             valor_total=valor_compra,
                             data_compra=data_compra_cartao,  # data real
@@ -682,13 +727,22 @@ with tab_cartoes:
                                             contas_correntes_pagamento = [
                                                 c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
                                             ]
-                                            conta_pagamento_nome = st.selectbox("Pagar com a conta:", [c.nome for c in contas_correntes_pagamento])
+                                            # Seleção robusta por ID (evita colisão de nomes)
+                                            def _label_cc_p(c):
+                                                return f"{c.nome} • Corrente • {c.id_conta[:6]}"
+
+                                            mapa_cc_pag = {c.id_conta: (c, _label_cc_p(c)) for c in contas_correntes_pagamento}
+                                            ids_cc_pag = list(mapa_cc_pag.keys())
+
+                                            conta_pagamento_id = st.selectbox(
+                                                "Pagar com a conta:",
+                                                options=ids_cc_pag,
+                                                format_func=lambda cid: mapa_cc_pag[cid][1],
+                                                key=f"pay_fatura_conta_id_{fatura.id_fatura}"
+                                            )
                                             data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
                                             if st.form_submit_button("Confirmar Pagamento"):
-                                                id_conta_pagamento = next(
-                                                    (c.id_conta for c in contas_correntes_pagamento if c.nome == conta_pagamento_nome), None
-                                                )
-                                                sucesso = st.session_state.gerenciador.pagar_fatura(fatura.id_fatura, id_conta_pagamento, data_pagamento)
+                                                sucesso = st.session_state.gerenciador.pagar_fatura(fatura.id_fatura, conta_pagamento_id, data_pagamento)
                                                 if sucesso:
                                                     st.session_state.gerenciador.salvar_dados()
                                                     st.toast("Fatura paga com sucesso!")
