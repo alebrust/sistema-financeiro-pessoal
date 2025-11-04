@@ -435,7 +435,7 @@ with tab_contas:
                                 attr_mudou = False
                                 if isinstance(conta, ContaCorrente):
                                     attr_mudou = conta.editar_limite(novo_limite)
-                                if nome_mudou ou logo_mudou ou attr_mudou:
+                                if nome_mudou or logo_mudou or attr_mudou:
                                     st.session_state.gerenciador.salvar_dados()
                                     st.toast(f"Conta '{novo_nome}' atualizada!")
                                     st.rerun()
