@@ -143,29 +143,54 @@ with tab_dashboard:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
         if len(todas_as_contas) >= 2:
-            with st.form("transfer_form", clear_on_submit=True):
-                nomes_contas = [c.nome for c in todas_as_contas]
-                col_form1, col_form2 = st.columns(2)
-                with col_form1:
-                    conta_origem_nome = st.selectbox("De:", nomes_contas, key="transfer_origem")
-                with col_form2:
-                    opcoes_destino = [
-                        nome for nome in nomes_contas if nome != st.session_state.get("transfer_origem", nomes_contas[0])
-                    ]
-                    conta_destino_nome = st.selectbox("Para:", opcoes_destino, key="transfer_destino")
-                valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
-                if st.form_submit_button("Confirmar Transferência", use_container_width=True):
-                    id_origem = next((c.id_conta for c in todas_as_contas if c.nome == conta_origem_nome), None)
-                    id_destino = next((c.id_conta for c in todas_as_contas if c.nome == conta_destino_nome), None)
-                    if id_origem and id_destino and valor_transferencia > 0:
-                        if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
-                            st.session_state.gerenciador.salvar_dados()
-                            st.success("Transferência realizada!")
-                            st.rerun()
-                        else:
-                            st.error("Falha na transferência. Saldo insuficiente?")
-                    else:
-                        st.error("Erro nos dados da transferência.")
+
+        with st.form("transfer_form", clear_on_submit=True):
+    contas = todas_as_contas  # use os objetos diretamente
+
+    def _fmt_conta(c):
+        tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
+        # Inclui um sufixo curto do ID para diferenciar quando nomes forem iguais
+        return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
+
+    # Se ainda não houver nenhuma conta em sessão, defina uma default para evitar erro no primeiro render
+    conta_origem_default = contas[0] if contas else None
+
+    # Seleciona a conta de origem por objeto (não por nome)
+    conta_origem = st.selectbox(
+        "De:",
+        options=contas,
+        format_func=_fmt_conta,
+        key="transfer_origem_obj",
+        index=0 if conta_origem_default else 0
+    )
+
+    # Destino: todas as contas menos a origem (comparando por id_conta, não por nome)
+    opcoes_destino = [c for c in contas if c.id_conta != conta_origem.id_conta] if conta_origem else []
+
+    conta_destino = st.selectbox(
+        "Para:",
+        options=opcoes_destino,
+        format_func=_fmt_conta,
+        key="transfer_destino_obj"
+    )
+
+    valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+
+    if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+        if conta_origem and conta_destino and valor_transferencia > 0:
+            id_origem = conta_origem.id_conta
+            id_destino = conta_destino.id_conta
+            if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
+                st.session_state.gerenciador.salvar_dados()
+                st.success("Transferência realizada!")
+                st.rerun()
+            else:
+                st.error("Falha na transferência. Saldo insuficiente?")
+        else:
+            st.error("Erro nos dados da transferência.")
+
+
+            
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
