@@ -145,50 +145,56 @@ with tab_dashboard:
         if len(todas_as_contas) >= 2:
 
         with st.form("transfer_form", clear_on_submit=True):
-    contas = todas_as_contas  # use os objetos diretamente
+    contas = st.session_state.gerenciador.contas  # lista de contas em memória
 
-    def _fmt_conta(c):
+    # Mapeia cada conta para um par (id, label legível)
+    def _label_conta(c):
         tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
-        # Inclui um sufixo curto do ID para diferenciar quando nomes forem iguais
         return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
 
-    # Se ainda não houver nenhuma conta em sessão, defina uma default para evitar erro no primeiro render
-    conta_origem_default = contas[0] if contas else None
+    opcoes = [(c.id_conta, _label_conta(c)) for c in contas]
 
-    # Seleciona a conta de origem por objeto (não por nome)
-    conta_origem = st.selectbox(
-        "De:",
-        options=contas,
-        format_func=_fmt_conta,
-        key="transfer_origem_obj",
-        index=0 if conta_origem_default else 0
-    )
+    if len(opcoes) < 2:
+        st.error("É necessário ter ao menos duas contas para transferir.")
+    else:
+        # Seleciona origem pelo índice (estável)
+        idx_origem = 0
+        conta_origem_id, conta_origem_label = st.selectbox(
+            "De:",
+            options=list(range(len(opcoes))),
+            format_func=lambda i: opcoes[i][1],
+            key="transfer_origem_idx"
+        ), None  # recebemos o índice; o label vem do array
 
-    # Destino: todas as contas menos a origem (comparando por id_conta, não por nome)
-    opcoes_destino = [c for c in contas if c.id_conta != conta_origem.id_conta] if conta_origem else []
+        conta_origem_id = opcoes[st.session_state.transfer_origem_idx][0]
+        conta_origem_label = opcoes[st.session_state.transfer_origem_idx][1]
 
-    conta_destino = st.selectbox(
-        "Para:",
-        options=opcoes_destino,
-        format_func=_fmt_conta,
-        key="transfer_destino_obj"
-    )
+        # Destino: todas as contas com ID diferente da origem
+        opcoes_destino = [(cid, lbl) for (cid, lbl) in opcoes if cid != conta_origem_id]
 
-    valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+        # Seleciona destino por índice dentro da lista filtrada
+        idx_destino = st.selectbox(
+            "Para:",
+            options=list(range(len(opcoes_destino))),
+            format_func=lambda i: opcoes_destino[i][1],
+            key="transfer_destino_idx"
+        )
+        conta_destino_id = opcoes_destino[idx_destino][0]
+        conta_destino_label = opcoes_destino[idx_destino][1]
 
-    if st.form_submit_button("Confirmar Transferência", use_container_width=True):
-        if conta_origem and conta_destino and valor_transferencia > 0:
-            id_origem = conta_origem.id_conta
-            id_destino = conta_destino.id_conta
-            if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
+        valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+
+        # Opcional: informativo visual para conferir antes de enviar
+        st.caption(f"Origem: {conta_origem_label}")
+        st.caption(f"Destino: {conta_destino_label}")
+
+        if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+            if st.session_state.gerenciador.realizar_transferencia(conta_origem_id, conta_destino_id, valor_transferencia):
                 st.session_state.gerenciador.salvar_dados()
                 st.success("Transferência realizada!")
                 st.rerun()
             else:
                 st.error("Falha na transferência. Saldo insuficiente?")
-        else:
-            st.error("Erro nos dados da transferência.")
-
 
             
         else:
