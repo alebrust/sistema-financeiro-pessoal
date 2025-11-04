@@ -142,51 +142,66 @@ with tab_dashboard:
     with col1:
         st.header("Realizar Transferência")
         todas_as_contas = st.session_state.gerenciador.contas
+
         if len(todas_as_contas) >= 2:
             with st.form("transfer_form", clear_on_submit=True):
-    contas = todas_as_contas  # use os objetos diretamente
+                contas = st.session_state.gerenciador.contas
 
-    def _fmt_conta(c):
-        tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
-        # Inclui um sufixo curto do ID para diferenciar quando nomes forem iguais
-        return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
+                # Remoção de chaves antigas baseadas em nome/índice para evitar conflitos
+                for legacy_key in ("transfer_origem", "transfer_destino"):
+                    if legacy_key in st.session_state:
+                        del st.session_state[legacy_key]
 
-    # Se ainda não houver nenhuma conta em sessão, defina uma default para evitar erro no primeiro render
-    conta_origem_default = contas[0] if contas else None
+                # Mapa id_conta -> (rótulo amigável, objeto conta)
+                def _label_conta(c):
+                    tipo = "Corrente" if isinstance(c, ContaCorrente) else "Investimento"
+                    return f"{c.nome} • {tipo} • {c.id_conta[:6]}"
 
-    # Seleciona a conta de origem por objeto (não por nome)
-    conta_origem = st.selectbox(
-        "De:",
-        options=contas,
-        format_func=_fmt_conta,
-        key="transfer_origem_obj",
-        index=0 if conta_origem_default else 0
-    )
+                mapa = {c.id_conta: (_label_conta(c), c) for c in contas}
+                ids = list(mapa.keys())
 
-    # Destino: todas as contas menos a origem (comparando por id_conta, não por nome)
-    opcoes_destino = [c for c in contas if c.id_conta != conta_origem.id_conta] if conta_origem else []
+                # Selects por ID (valor único e estável)
+                conta_origem_id = st.selectbox(
+                    "De:",
+                    options=ids,
+                    format_func=lambda cid: mapa[cid][0],
+                    key="transfer_origem_id"
+                )
 
-    conta_destino = st.selectbox(
-        "Para:",
-        options=opcoes_destino,
-        format_func=_fmt_conta,
-        key="transfer_destino_obj"
-    )
+                ids_destino = [cid for cid in ids if cid != conta_origem_id]
+                conta_destino_id = st.selectbox(
+                    "Para:",
+                    options=ids_destino,
+                    format_func=lambda cid: mapa[cid][0],
+                    key="transfer_destino_id"
+                )
 
-    valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+                valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
 
-    if st.form_submit_button("Confirmar Transferência", use_container_width=True):
-        if conta_origem and conta_destino and valor_transferencia > 0:
-            id_origem = conta_origem.id_conta
-            id_destino = conta_destino.id_conta
-            if st.session_state.gerenciador.realizar_transferencia(id_origem, id_destino, valor_transferencia):
-                st.session_state.gerenciador.salvar_dados()
-                st.success("Transferência realizada!")
-                st.rerun()
-            else:
-                st.error("Falha na transferência. Saldo insuficiente?")
-        else:
-            st.error("Erro nos dados da transferência.")
+                # Aviso específico para Conta de Investimento: precisa ter saldo_caixa
+                conta_origem_obj = mapa[conta_origem_id][1]
+                if isinstance(conta_origem_obj, ContaInvestimento):
+                    saldo_caixa_origem = float(conta_origem_obj.saldo_caixa)
+                    if valor_transferencia > saldo_caixa_origem:
+                        st.warning(
+                            f"Saldo em caixa insuficiente na corretora de origem. Caixa atual: "
+                            f"{formatar_moeda(saldo_caixa_origem)}. "
+                            f"Para transferir, é necessário ter saldo em caixa (não apenas em ativos)."
+                        )
+
+                if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+                    ok = st.session_state.gerenciador.realizar_transferencia(
+                        conta_origem_id, conta_destino_id, valor_transferencia
+                    )
+                    if ok:
+                        st.session_state.gerenciador.salvar_dados()
+                        st.success("Transferência realizada!")
+                        st.rerun()
+                    else:
+                        if isinstance(conta_origem_obj, ContaCorrente):
+                            st.error("Falha na transferência. Saldo insuficiente na conta corrente (considerando o limite)?")
+                        else:
+                            st.error("Falha na transferência. Saldo em caixa insuficiente na conta de investimento de origem.")
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
@@ -350,7 +365,6 @@ with tab_contas:
                                 colunas = ["Ticker", "Tipo", "Quantidade", "Preço Médio", "Preço Atual", "Valor Atual", "P/L (R$)", "P/L (%)"]
                                 df = df[colunas] if not df.empty else pd.DataFrame(columns=colunas)
 
-
                                 def _fmt_num6(v: float) -> str:
                                     if pd.isna(v):
                                         return ""
@@ -387,7 +401,6 @@ with tab_contas:
                                 )
                                 
                                 st.dataframe(styled, use_container_width=True)
-                                
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
@@ -422,7 +435,7 @@ with tab_contas:
                                 attr_mudou = False
                                 if isinstance(conta, ContaCorrente):
                                     attr_mudou = conta.editar_limite(novo_limite)
-                                if nome_mudou or logo_mudou or attr_mudou:
+                                if nome_mudou ou logo_mudou ou attr_mudou:
                                     st.session_state.gerenciador.salvar_dados()
                                     st.toast(f"Conta '{novo_nome}' atualizada!")
                                     st.rerun()
@@ -707,6 +720,7 @@ with tab_cartoes:
                                 st.rerun()
                     with col_cancel:
                         if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
+                        # Corrige estado e evita re-render conflitando
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
 
