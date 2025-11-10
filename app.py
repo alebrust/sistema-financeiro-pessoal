@@ -27,6 +27,7 @@ for key, default in [
     ("compra_para_excluir", None),
     ("fatura_para_pagar", None),
     ("cartao_para_excluir", None),
+    ("categoria_para_excluir", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -764,9 +765,27 @@ with tab_config:
                 cat_col1, cat_col2 = st.columns([4, 1])
                 cat_col1.write(f"- {cat}")
                 if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
-                    st.session_state.gerenciador.remover_categoria(cat)
-                    st.session_state.gerenciador.salvar_dados()
+                    st.session_state.categoria_para_excluir = cat
                     st.rerun()
+                    # Bloco de confirmação (padrão usado em transações/contas/cartões)
+                    if st.session_state.categoria_para_excluir == cat:
+                        st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
+                        col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+                        with col_confirm:
+                        if st.button(
+                        "Sim, excluir permanentemente",
+                        key=f"confirm_del_cat_{cat}",
+                        type="primary"
+                    ):
+                        st.session_state.gerenciador.remover_categoria(cat)
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast(f"Categoria '{cat}' removida!")
+                        st.session_state.categoria_para_excluir = None
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
+                        st.session_state.categoria_para_excluir = None
+                        st.rerun()
 
     with col_cat2:
         with st.form("add_category_form", clear_on_submit=True):
