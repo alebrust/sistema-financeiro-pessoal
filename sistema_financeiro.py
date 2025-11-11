@@ -722,31 +722,40 @@ class GerenciadorContas:
         total_custo = 0.0
 
         for a in conta.ativos:
-            preco_atual = self.obter_preco_atual(a.ticker, a.tipo_ativo)
-            custo = a.preco_medio * a.quantidade
-            total_custo += custo
+            preco_atual = float(preco_atual or 0.0)
 
-            if preco_atual is not None:
-                valor_atual = preco_atual * a.quantidade
-                pl = valor_atual - custo
-                pl_pct = (pl / custo * 100.0) if custo > 0 else 0.0
-                total_valor_atual += valor_atual
-            else:
-                valor_atual = None
-                pl = None
-                pl_pct = None
-
-            ativos_resumo.append({
-                "ticker": a.ticker,
-                "tipo": a.tipo_ativo,
-                "quantidade": a.quantidade,
-                "preco_medio": a.preco_medio,
-                "preco_atual": preco_atual,
-                "valor_atual": valor_atual,
-                "custo": custo,
-                "pl": pl,
-                "pl_pct": pl_pct,
+            # Converte de USD para BRL se for "Ação EUA"
+            preco_atual_brl = preco_atual
+            try:
+                if getattr(ativo, "tipo_ativo", "") == "Ação EUA":
+                    fx = self._obter_fx_usd_brl()  # método do Passo 1
+                    preco_atual_brl = preco_atual * float(fx)
+            except Exception:
+                # Se der qualquer erro ao buscar o câmbio, mantém o valor original
+                preco_atual_brl = preco_atual
+            
+            # A partir daqui, use SOMENTE BRL
+            quantidade = float(ativo.quantidade or 0.0)
+            preco_medio_brl = float(ativo.preco_medio or 0.0)  # seu preço médio já é BRL
+            valor_atual = quantidade * preco_atual_brl
+            custo_total = quantidade * preco_medio_brl
+            pl_reais = valor_atual - custo_total
+            pl_pct = (pl_reais / custo_total) * 100 if custo_total > 0 else 0.0
+            
+            # Monte o item de posição usando os campos em BRL
+            itens.append({
+                "ticker": ativo.ticker,
+                "tipo": getattr(ativo, "tipo_ativo", ""),
+                "quantidade": quantidade,
+                "preco_medio": preco_medio_brl,   # BRL
+                "preco_atual": preco_atual_brl,   # BRL (convertido se "Ação EUA")
+                "valor_atual": valor_atual,       # BRL
+                "pl": pl_reais,                   # BRL
+                "pl_pct": pl_pct,                 # %
             })
+            
+            # Se você soma o total em algum acumulador, garanta que use o valor em BRL
+            total_valor_atual_ativos += valor_atual
 
         patrimonio_atualizado = conta.saldo_caixa + total_valor_atual
         return {
@@ -757,7 +766,32 @@ class GerenciadorContas:
             "total_custo_ativos": total_custo,
             "patrimonio_atualizado": patrimonio_atualizado,
         }
+    def _obter_fx_usd_brl(self) -> float:
+     """
+     Retorna o câmbio USD/BRL (quantos BRL por 1 USD), com cache.
+     Usa o ticker do Yahoo Finance: USDBRL=X.
+     """
+     try:
+       if not hasattr(self, "_cotacoes_cache"):
+          self._cotacoes_cache = {}
 
+       cache_key = "FX_USDBRL"
+       if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
+          return float(self._cotacoes_cache[cache_key])
+
+       import yfinance as yf
+
+       ticker_fx = yf.Ticker("USDBRL=X")
+       fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
+       if fx is None:
+          hist = ticker_fx.history(period="5d", interval="1d")
+          fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
+
+       fx_val = float(fx) if fx is not None else None
+       self._cotacoes_cache[cache_key] = fx_val
+       return fx_val if fx_val is not None else 1.0
+     except Exception:
+       return 1.0      
     # ------------------------
     # Cartões
     # ------------------------
