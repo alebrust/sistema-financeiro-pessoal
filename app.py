@@ -27,8 +27,7 @@ for key, default in [
     ("compra_para_excluir", None),
     ("fatura_para_pagar", None),
     ("cartao_para_excluir", None),
-    ("categoria_para_excluir", None),
-]:
+   ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
