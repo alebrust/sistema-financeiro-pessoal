@@ -698,57 +698,122 @@ class GerenciadorContas:
 
         raise ValueError(f"Cotação indisponível para {symbol}")
 
-    def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
-        symbol = self._normalizar_ticker(ticker, tipo_ativo)
-        now = self._agora_epoch()
-        cached = self._cotacoes_cache.get(symbol)
-        if cached and (now - cached["ts"] <= self._cotacoes_ttl):
-            return cached["preco"]
+    def _obter_preco_atual_seguro(self, ticker: str) -> float:
+    """
+    Obtém o preço atual do ticker com cache em self._cotacoes_cache.
+    - Se existir um método oficial no seu backend (ex.: obter_preco_atual), usa-o.
+    - Caso contrário, usa yfinance diretamente.
+    - Fallback: 0.0 em caso de erro.
+    """
+    try:
+        if not hasattr(self, "_cotacoes_cache"):
+            self._cotacoes_cache = {}
 
-        try:
-            preco = self._obter_preco_yf(symbol)
-            self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
-            return preco
-        except Exception:
-            return None
+        cache_key = f"TICKER_{ticker}"
+        if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
+            return float(self._cotacoes_cache[cache_key])
 
-    def calcular_posicao_conta_investimento(self, id_conta: str) -> Optional[Dict[str, Any]]:
-        conta = self.buscar_conta_por_id(id_conta)
-        if not conta or not isinstance(conta, ContaInvestimento):
-            return None
+        preco = None
 
-        ativos_resumo: List[Dict[str, Any]] = []
-        total_valor_atual = 0.0
-        total_custo = 0.0
-
-        for a in conta.ativos:
-            preco_atual_raw = locals().get("preco_atual", None)
-            if preco_atual_raw is None:
-               preco_atual_raw = 0.0
-            preco_atual = float(preco_atual_raw or 0.0)
-
-            # Converte de USD para BRL se for "Ação EUA"
-            preco_atual_brl = preco_atual
+        # Se existir método oficial do seu código, priorize
+        if hasattr(self, "obter_preco_atual") and callable(getattr(self, "obter_preco_atual")):
             try:
-                if getattr(ativo, "tipo_ativo", "") == "Ação EUA":
-                    fx = self._obter_fx_usd_brl()  # método do Passo 1
-                    preco_atual_brl = preco_atual * float(fx)
+                preco = float(self.obter_preco_atual(ticker))
             except Exception:
-                # Se der qualquer erro ao buscar o câmbio, mantém o valor original
-                preco_atual_brl = preco_atual
-            
-            # A partir daqui, use SOMENTE BRL
-            quantidade = float(ativo.quantidade or 0.0)
-            preco_medio_brl = float(ativo.preco_medio or 0.0)  # seu preço médio já é BRL
+                preco = None
+
+        # Fallback via yfinance
+        if preco is None:
+            import yfinance as yf
+            tk = yf.Ticker(ticker)
+
+            # Tenta info consolidado
+            preco = tk.info.get("regularMarketPrice") or tk.info.get("previousClose")
+
+            # Se ainda None, tenta histórico curtíssimo
+            if preco is None:
+                hist = tk.history(period="5d", interval="1d")
+                if not hist.empty:
+                    preco = float(hist["Close"].dropna().iloc[-1])
+
+        preco_val = float(preco) if preco is not None else 0.0
+        self._cotacoes_cache[cache_key] = preco_val
+        return preco_val
+    except Exception:
+        return 0.0
+
+    def calcular_posicao_conta_investimento(self, conta_id: str) -> dict:
+    """
+    Calcula a posição de uma ContaInvestimento em BRL, convertendo automaticamente
+    preços de 'Ação EUA' (USD) para BRL via USDBRL=X.
+
+    Retorno:
+      {
+        "saldo_caixa": float,                     # BRL
+        "total_valor_atual_ativos": float,       # BRL
+        "patrimonio_atualizado": float,          # BRL
+        "ativos": [
+            {
+              "ticker": str,
+              "tipo": str,                       # e.g., "Ação BR", "Ação EUA", "FII", etc.
+              "quantidade": float,
+              "preco_medio": float,              # BRL
+              "preco_atual": float,              # BRL (USD->BRL se "Ação EUA")
+              "valor_atual": float,              # BRL
+              "pl": float,                       # BRL
+              "pl_pct": float                    # %
+            },
+            ...
+        ]
+      }
+    """
+    # 1) Localiza a conta
+    conta = None
+    for c in getattr(self, "contas", []):
+        # Evita dependência direta de import: detecta por atributos característicos
+        if getattr(c, "id_conta", None) == conta_id and hasattr(c, "ativos") and hasattr(c, "saldo_caixa"):
+            conta = c
+            break
+
+    if conta is None:
+        return {
+            "saldo_caixa": 0.0,
+            "total_valor_atual_ativos": 0.0,
+            "patrimonio_atualizado": 0.0,
+            "ativos": []
+        }
+
+    # 2) Preparação e acumuladores
+    itens = []
+    total_valor_atual_ativos = 0.0
+    saldo_caixa = float(getattr(conta, "saldo_caixa", 0.0) or 0.0)
+
+    # 3) Itera ativos
+    for ativo in getattr(conta, "ativos", []):
+        try:
+            ticker = getattr(ativo, "ticker", "")
+            tipo_ativo = getattr(ativo, "tipo_ativo", "")
+            quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
+            preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL no seu fluxo
+
+            # 3.1) Obtém preço atual bruto do ticker (normalmente BRL para BR, USD para EUA)
+            preco_atual_raw = self._obter_preco_atual_seguro(ticker)  # float
+
+            # 3.2) Converte para BRL se for "Ação EUA"
+            preco_atual_brl = float(preco_atual_raw or 0.0)
+            if tipo_ativo == "Ação EUA":
+                fx = self._obter_fx_usd_brl()  # float
+                preco_atual_brl = float(preco_atual_raw) * float(fx)
+
+            # 3.3) Cálculos em BRL
             valor_atual = quantidade * preco_atual_brl
             custo_total = quantidade * preco_medio_brl
             pl_reais = valor_atual - custo_total
             pl_pct = (pl_reais / custo_total) * 100 if custo_total > 0 else 0.0
-            
-            # Monte o item de posição usando os campos em BRL
+
             itens.append({
-                "ticker": ativo.ticker,
-                "tipo": getattr(ativo, "tipo_ativo", ""),
+                "ticker": ticker,
+                "tipo": tipo_ativo,
                 "quantidade": quantidade,
                 "preco_medio": preco_medio_brl,   # BRL
                 "preco_atual": preco_atual_brl,   # BRL (convertido se "Ação EUA")
@@ -756,45 +821,51 @@ class GerenciadorContas:
                 "pl": pl_reais,                   # BRL
                 "pl_pct": pl_pct,                 # %
             })
-            
-            # Se você soma o total em algum acumulador, garanta que use o valor em BRL
+
             total_valor_atual_ativos += valor_atual
 
-        patrimonio_atualizado = conta.saldo_caixa + total_valor_atual
-        return {
-            "conta": conta.nome,
-            "saldo_caixa": conta.saldo_caixa,
-            "ativos": ativos_resumo,
-            "total_valor_atual_ativos": total_valor_atual,
-            "total_custo_ativos": total_custo,
-            "patrimonio_atualizado": patrimonio_atualizado,
-        }
+        except Exception:
+            # Em caso de erro por ativo, apenas ignora aquele item e segue
+            continue
+
+    # 4) Patrimônio atualizado (BRL)
+    patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
+
+    return {
+        "saldo_caixa": float(saldo_caixa),
+        "total_valor_atual_ativos": float(total_valor_atual_ativos),
+        "patrimonio_atualizado": float(patrimonio_atualizado),
+        "ativos": itens
+    }
     def _obter_fx_usd_brl(self) -> float:
-     """
-     Retorna o câmbio USD/BRL (quantos BRL por 1 USD), com cache.
-     Usa o ticker do Yahoo Finance: USDBRL=X.
-     """
-     try:
-       if not hasattr(self, "_cotacoes_cache"):
-          self._cotacoes_cache = {}
+    """
+    Retorna o câmbio USD/BRL (quantos BRL por 1 USD), com cache em self._cotacoes_cache.
+    Usa o ticker do Yahoo Finance: USDBRL=X.
+    Fallback seguro: 1.0 em caso de erro, para não quebrar cálculos.
+    """
+    try:
+        if not hasattr(self, "_cotacoes_cache"):
+            self._cotacoes_cache = {}
 
-       cache_key = "FX_USDBRL"
-       if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
-          return float(self._cotacoes_cache[cache_key])
+        cache_key = "FX_USDBRL"
+        if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
+            return float(self._cotacoes_cache[cache_key])
 
-       import yfinance as yf
+        import yfinance as yf
 
-       ticker_fx = yf.Ticker("USDBRL=X")
-       fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
-       if fx is None:
-          hist = ticker_fx.history(period="5d", interval="1d")
-          fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
+        ticker_fx = yf.Ticker("USDBRL=X")
+        # Tenta preço de mercado/fechamento anterior
+        fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
+        if fx is None:
+            # Fallback pelo histórico curto
+            hist = ticker_fx.history(period="5d", interval="1d")
+            fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
 
-       fx_val = float(fx) if fx is not None else None
-       self._cotacoes_cache[cache_key] = fx_val
-       return fx_val if fx_val is not None else 1.0
-     except Exception:
-       return 1.0      
+        fx_val = float(fx) if fx is not None else None
+        self._cotacoes_cache[cache_key] = fx_val
+        return fx_val if fx_val is not None else 1.0
+    except Exception:
+        return 1.0
     # ------------------------
     # Cartões
     # ------------------------
