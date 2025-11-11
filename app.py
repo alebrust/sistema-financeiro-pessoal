@@ -347,8 +347,18 @@ with tab_contas:
                         st.image(conta.logo_url, width=65)
                     else:
                         st.write("🏦" if isinstance(conta, ContaCorrente) else "📈")
+                
+                # Valor do título do expansor:
+                # - ContaCorrente: saldo
+                # - ContaInvestimento: patrimônio atualizado (saldo_caixa + valor atual dos ativos)
+                if isinstance(conta, ContaInvestimento):
+                    pos_header = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+                    patrimonio_header = pos_header.get("patrimonio_atualizado", float(conta.saldo))
+                else:
+                    patrimonio_header = float(conta.saldo)
+                
                 with expander_col:
-                    with st.expander(f"{conta.nome} - {formatar_moeda(conta.saldo)}"):
+                    with st.expander(f"{conta.nome} - {formatar_moeda(patrimonio_header)}"):
                         if isinstance(conta, ContaCorrente):
                             st.write(f"Limite: {formatar_moeda(conta.limite_cheque_especial)}")
                         elif isinstance(conta, ContaInvestimento):
