@@ -722,7 +722,10 @@ class GerenciadorContas:
         total_custo = 0.0
 
         for a in conta.ativos:
-            preco_atual = float(preco_atual or 0.0)
+            preco_atual_raw = locals().get("preco_atual", None)
+            if preco_atual_raw is None:
+               preco_atual_raw = 0.0
+            preco_atual = float(preco_atual_raw or 0.0)
 
             # Converte de USD para BRL se for "Ação EUA"
             preco_atual_brl = preco_atual
