@@ -781,7 +781,7 @@ with tab_config:
 
                     with col_confirm:
                         if st.button(
-                            "Sim, excluir permanently",
+                            "Sim, excluir permanentemente",
                             key=f"confirm_del_cat_{cat}",
                             type="primary"
                         ):
