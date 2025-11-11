@@ -753,49 +753,60 @@ with tab_cartoes:
 with tab_config:
     st.header("Configurações Gerais")
     st.subheader("Gerenciar Categorias")
-    col_cat1, col_cat2 = st.columns(2)
 
-    with col_cat1:
-        st.write("Categorias existentes:")
-        categorias = st.session_state.gerenciador.categorias
-        if not categorias:
-            st.info("Nenhuma categoria cadastrada.")
+# Colunas da seção de categorias: lista à esquerda, criação à direita
+col_cat1, col_cat2 = st.columns([3, 2])
+
+with col_cat1:
+    st.write("Categorias existentes:")
+    categorias = st.session_state.gerenciador.categorias
+
+    if not categorias:
+        st.info("Nenhuma categoria cadastrada.")
+    else:
+        for cat in categorias:
+            cat_col1, cat_col2 = st.columns([4, 1])
+
+            cat_col1.write(f"- {cat}")
+
+            # Botão da lixeira: aciona confirmação ao invés de excluir direto
+            if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
+                st.session_state.categoria_para_excluir = cat
+                st.rerun()
+
+            # Bloco de confirmação
+            if st.session_state.categoria_para_excluir == cat:
+                st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
+                col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+
+                with col_confirm:
+                    if st.button(
+                        "Sim, excluir permanentemente",
+                        key=f"confirm_del_cat_{cat}",
+                        type="primary"
+                    ):
+                        st.session_state.gerenciador.remover_categoria(cat)
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast(f"Categoria '{cat}' removida!")
+                        st.session_state.categoria_para_excluir = None
+                        st.rerun()
+
+                with col_cancel:
+                    if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
+                        st.session_state.categoria_para_excluir = None
+                        st.rerun()
+
+with col_cat2:
+    st.write("Nova categoria")
+    nova_cat = st.text_input("Nome da categoria", key="nova_categoria_input")
+    if st.button("Adicionar categoria", key="add_categoria_btn"):
+        nome = (nova_cat or "").strip()
+        if not nome:
+            st.warning("Informe um nome para a categoria.")
+        elif nome in st.session_state.gerenciador.categorias:
+            st.info(f"A categoria '{nome}' já existe.")
         else:
-            for cat in categorias:
-    cat_col1, cat_col2 = st.columns([4, 1])
-    cat_col1.write(f"- {cat}")
-    if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
-        # Em vez de excluir direto, aciona confirmação
-        st.session_state.categoria_para_excluir = cat
-        st.rerun()
-
-    # Bloco de confirmação (padrão usado em transações/contas/cartões)
-    if st.session_state.categoria_para_excluir == cat:
-        st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
-        col_confirm, col_cancel, _ = st.columns([1, 1, 3])
-
-        with col_confirm:
-            if st.button(
-                "Sim, excluir permanentemente",
-                key=f"confirm_del_cat_{cat}",
-                type="primary"
-            ):
-                st.session_state.gerenciador.remover_categoria(cat)
-                st.session_state.gerenciador.salvar_dados()
-                st.toast(f"Categoria '{cat}' removida!")
-                st.session_state.categoria_para_excluir = None
-                st.rerun()
-
-        with col_cancel:
-            if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
-                st.session_state.categoria_para_excluir = None
-                st.rerun()
-
-    with col_cat2:
-        with st.form("add_category_form", clear_on_submit=True):
-            nova_categoria = st.text_input("Nova Categoria")
-            if st.form_submit_button("Adicionar Categoria"):
-                if nova_categoria and nova_categoria.strip():
-                    st.session_state.gerenciador.adicionar_categoria(nova_categoria)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.rerun()
+            st.session_state.gerenciador.adicionar_categoria(nome)
+            st.session_state.gerenciador.salvar_dados()
+            st.toast(f"Categoria '{nome}' adicionada!")
+            st.rerun()
