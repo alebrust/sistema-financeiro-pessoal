@@ -138,29 +138,51 @@ with tab_dashboard:
                             else:
                                 st.error("Falha ao registrar. Saldo insuficiente?")
 
-        # --------------------------
-        # Resumo
-        # --------------------------
-        st.header("Resumo Financeiro")
-        todas_as_contas = st.session_state.gerenciador.contas
-        if todas_as_contas:
-            saldos_agrupados = defaultdict(float)
-            for conta in todas_as_contas:
-                if isinstance(conta, ContaCorrente):
-                    saldos_agrupados["Contas Correntes"] += conta.saldo
-                elif isinstance(conta, ContaInvestimento):
-                    if conta.saldo_caixa > 0:
-                        saldos_agrupados["Caixa Corretoras"] += conta.saldo_caixa
-                    for ativo in conta.ativos:
-                        saldos_agrupados[ativo.tipo_ativo] += ativo.valor_total
-            st.subheader("Patrimônio por Categoria")
-            for categoria, saldo in saldos_agrupados.items():
-                st.metric(label=categoria, value=formatar_moeda(saldo))
-            st.divider()
-            patrimonio_total = sum(c.saldo for c in todas_as_contas)
-            st.metric(label="Patrimônio Total", value=formatar_moeda(patrimonio_total))
-        else:
-            st.metric(label="Patrimônio Total", value="R$ 0,00")
+            # --------------------------
+            # Resumo (com valor atual de investimentos)
+            # --------------------------
+            st.header("Resumo Financeiro")
+            todas_as_contas = st.session_state.gerenciador.contas
+            if todas_as_contas:
+                saldos_agrupados = defaultdict(float)
+                patrimonio_total = 0.0
+            
+                for conta in todas_as_contas:
+                    if isinstance(conta, ContaCorrente):
+                        # Contas correntes: usa saldo direto
+                        saldos_agrupados["Contas Correntes"] += float(conta.saldo or 0.0)
+                        patrimonio_total += float(conta.saldo or 0.0)
+            
+                    elif isinstance(conta, ContaInvestimento):
+                        # Investimentos: usa posição atual (inclui rendimentos)
+                        pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+            
+                        saldo_caixa = float(pos.get("saldo_caixa", 0.0) or 0.0)
+                        total_valor_atual_ativos = float(pos.get("total_valor_atual_ativos", 0.0) or 0.0)
+                        patrimonio_atualizado = float(pos.get("patrimonio_atualizado", saldo_caixa + total_valor_atual_ativos) or 0.0)
+            
+                        # Agrupa caixa das corretoras
+                        saldos_agrupados["Caixa Corretoras"] += saldo_caixa
+            
+                        # Agrupa por tipo de ativo com VALOR ATUAL
+                        for item in pos.get("ativos", []):
+                            tipo = item.get("tipo", "Ativos")
+                            valor_atual = float(item.get("valor_atual", 0.0) or 0.0)
+                            saldos_agrupados[tipo] += valor_atual
+            
+                        # Patrimônio total usa o consolidado atualizado da conta de investimento
+                        patrimonio_total += patrimonio_atualizado
+            
+                st.subheader("Patrimônio por Categoria")
+                for categoria, saldo in saldos_agrupados.items():
+                    st.metric(label=categoria, value=formatar_moeda(saldo))
+            
+                st.divider()
+                st.metric(label="Patrimônio Total", value=formatar_moeda(patrimonio_total))
+            else:
+                st.metric(label="Patrimônio Total", value="R$ 0,00")
+
+
 
     with col1:
         st.header("Realizar Transferência")
