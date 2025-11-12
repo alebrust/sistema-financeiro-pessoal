@@ -72,7 +72,7 @@ with tab_dashboard:
                     with col_qnt:
                         quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
                     with col_preco:
-                        preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.01, format="%.2f")
+                        preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.00000001, format="%.8f")
                     data_compra = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
                     if st.form_submit_button("Confirmar Compra"):
                         if not all([ticker, quantidade > 0, preco_unitario > 0]):
