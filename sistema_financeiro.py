@@ -659,58 +659,58 @@ class GerenciadorContas:
         return time.time()
 
     def _obter_coingecko_id(self, ticker: str) -> Optional[str]:
-    """
-    Mapeia ticker de cripto para CoinGecko ID.
-    Ex: BTC -> bitcoin, ETH -> ethereum, PEPE -> pepe
-    """
-    ticker_upper = ticker.upper().strip()
-    
-    # Cache para evitar múltiplas consultas
-    if ticker_upper in self._cg_cache_ids:
-        return self._cg_cache_ids[ticker_upper]
-    
-    # Mapeamento manual dos mais populares (performance)
-    mapeamento_comum = {
-        "BTC": "bitcoin",
-        "ETH": "ethereum",
-        "BNB": "binancecoin",
-        "XRP": "ripple",
-        "ADA": "cardano",
-        "DOGE": "dogecoin",
-        "SOL": "solana",
-        "DOT": "polkadot",
-        "MATIC": "matic-network",
-        "SHIB": "shiba-inu",
-        "PEPE": "pepe",
-        "AVAX": "avalanche-2",
-        "LINK": "chainlink",
-        "UNI": "uniswap",
-        "LTC": "litecoin",
-        "ATOM": "cosmos",
-        "XLM": "stellar",
-        "USDT": "tether",
-        "USDC": "usd-coin",
-    }
-    
-    if ticker_upper in mapeamento_comum:
-        coin_id = mapeamento_comum[ticker_upper]
-        self._cg_cache_ids[ticker_upper] = coin_id
-        return coin_id
-    
-    # Busca dinâmica (fallback para criptos não mapeadas)
-    try:
-        lista = self._cg.get_coins_list()
-        ticker_lower = ticker.lower()
-        for coin in lista:
-            if coin["symbol"].lower() == ticker_lower:
-                coin_id = coin["id"]
-                self._cg_cache_ids[ticker_upper] = coin_id
-                return coin_id
-    except Exception:
-        pass
-    
-    return None
-
+        """
+        Mapeia ticker de cripto para CoinGecko ID.
+        Ex: BTC -> bitcoin, ETH -> ethereum, PEPE -> pepe
+        """
+        ticker_upper = ticker.upper().strip()
+        
+        # Cache para evitar múltiplas consultas
+        if ticker_upper in self._cg_cache_ids:
+            return self._cg_cache_ids[ticker_upper]
+        
+        # Mapeamento manual dos mais populares (performance)
+        mapeamento_comum = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "BNB": "binancecoin",
+            "XRP": "ripple",
+            "ADA": "cardano",
+            "DOGE": "dogecoin",
+            "SOL": "solana",
+            "DOT": "polkadot",
+            "MATIC": "matic-network",
+            "SHIB": "shiba-inu",
+            "PEPE": "pepe",
+            "AVAX": "avalanche-2",
+            "LINK": "chainlink",
+            "UNI": "uniswap",
+            "LTC": "litecoin",
+            "ATOM": "cosmos",
+            "XLM": "stellar",
+            "USDT": "tether",
+            "USDC": "usd-coin",
+        }
+        
+        if ticker_upper in mapeamento_comum:
+            coin_id = mapeamento_comum[ticker_upper]
+            self._cg_cache_ids[ticker_upper] = coin_id
+            return coin_id
+        
+        # Busca dinâmica (fallback para criptos não mapeadas)
+        try:
+            lista = self._cg.get_coins_list()
+            ticker_lower = ticker.lower()
+            for coin in lista:
+                if coin["symbol"].lower() == ticker_lower:
+                    coin_id = coin["id"]
+                    self._cg_cache_ids[ticker_upper] = coin_id
+                    return coin_id
+        except Exception:
+            pass
+        
+        return None    
+  
     def _obter_preco_coingecko(self, ticker: str) -> float:
     """
     Busca preço atual da cripto no CoinGecko (em BRL).
