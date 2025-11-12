@@ -455,7 +455,7 @@ with tab_contas:
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
-
+                            
                             st.divider()
                             # Ativos (base de custo)
                             if conta.ativos:
@@ -464,14 +464,35 @@ with tab_contas:
                                 df_ativos["valor_total"] = df_ativos.apply(
                                     lambda row: row["quantidade"] * row["preco_medio"], axis=1
                                 )
-                                df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
-                                df_ativos["valor_total"] = df_ativos["valor_total"].apply(formatar_moeda)
-                                st.dataframe(
-                                    df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]],
-                                    use_container_width=True,
-                                    hide_index=True,
+                                
+                                # Formatação inteligente da quantidade (mesma lógica do "Detalhe por ativo")
+                                def _fmt_qtd_base(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    if v >= 1000:
+                                        return f"{v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_moeda_base(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                styled_base = (
+                                    df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]]
+                                    .style.format({
+                                        "quantidade": _fmt_qtd_base,
+                                        "preco_medio": _fmt_moeda_base,
+                                        "valor_total": _fmt_moeda_base,
+                                    })
+                                    .hide(axis="index")
                                 )
-
+                                
+                                st.dataframe(styled_base, use_container_width=True)
+                            
                         st.divider()
                         with st.form(f"edit_form_{conta.id_conta}"):
                             novo_nome = st.text_input("Nome", value=conta.nome)
