@@ -412,7 +412,15 @@ with tab_contas:
                                 def _fmt_num6(v: float) -> str:
                                     if pd.isna(v):
                                         return ""
-                                    return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    # Se valor >= 1000, formata sem casas decimais (ex.: 1.500.000)
+                                    if v >= 1000:
+                                        return f"{v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    # Se valor >= 1, formata com 2 casas (ex.: 123,45)
+                                    elif v >= 1:
+                                        return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    # Se valor < 1, formata com até 6 casas (ex.: 0,000123)
+                                    else:
+                                        return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
                                 
                                 def _fmt_moeda(v: float) -> str:
                                     if pd.isna(v):
