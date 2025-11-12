@@ -321,7 +321,7 @@ class GerenciadorContas:
             "Outros",
         ]
         # Cache de cotações
-        self._cotacoes_cache: Dict[str, Any] = {}
+        self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
         self._cotacoes_ttl: int = 60  # segundos
         self.carregar_dados()
 
@@ -698,28 +698,6 @@ class GerenciadorContas:
 
         raise ValueError(f"Cotação indisponível para {symbol}")
 
-    def _obter_fx_usd_brl(self) -> float:
-        # Retorna o câmbio USD/BRL com cache (USDBRL=X). Fallback seguro: 1.0
-        try:
-            if not hasattr(self, "_cotacoes_cache"):
-                self._cotacoes_cache = {}
-
-            cache_key = "FX_USDBRL"
-            if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
-                return float(self._cotacoes_cache[cache_key])
-
-            ticker_fx = yf.Ticker("USDBRL=X")
-            fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
-            if fx is None:
-                hist = ticker_fx.history(period="5d", interval="1d")
-                fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
-
-            fx_val = float(fx) if fx is not None else None
-            self._cotacoes_cache[cache_key] = fx_val
-            return fx_val if fx_val is not None else 1.0
-        except Exception:
-            return 1.0
-
     def _obter_preco_atual_seguro(self, ticker: str) -> float:
         # Obtém o preço atual do ticker com cache. Fallback via yfinance; retorna 0.0 em erro.
         try:
@@ -754,6 +732,28 @@ class GerenciadorContas:
         except Exception:
             return 0.0
 
+    def _obter_fx_usd_brl(self) -> float:
+        # Retorna o câmbio USD/BRL com cache (USDBRL=X). Fallback seguro: 1.0
+        try:
+            if not hasattr(self, "_cotacoes_cache"):
+                self._cotacoes_cache = {}
+
+            cache_key = "FX_USDBRL"
+            if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
+                return float(self._cotacoes_cache[cache_key])
+
+            ticker_fx = yf.Ticker("USDBRL=X")
+            fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
+            if fx is None:
+                hist = ticker_fx.history(period="5d", interval="1d")
+                fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
+
+            fx_val = float(fx) if fx is not None else None
+            self._cotacoes_cache[cache_key] = fx_val
+            return fx_val if fx_val is not None else 1.0
+        except Exception:
+            return 1.0
+
     def calcular_posicao_conta_investimento(self, conta_id: str) -> dict:
         # Calcula posição em BRL, convertendo 'Ação EUA' (USD) para BRL via USDBRL=X
         conta = None
@@ -781,11 +781,11 @@ class GerenciadorContas:
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
                 preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL
 
-                # Normaliza ticker para BR/Cripto. EUA costuma ser o próprio (ex.: KO)
-                symbol = self._normalizar_ticker(ticker, tipo_ativo)
+                # Normaliza ticker quando necessário (BR e Cripto)
+                ticker_para_cotacao = self._normalizar_ticker(ticker, tipo_ativo)
 
                 # Preço atual bruto (USD para EUA, BRL para BR, conforme ticker no yfinance)
-                preco_atual_raw = self._obter_preco_atual_seguro(symbol)
+                preco_atual_raw = self._obter_preco_atual_seguro(ticker_para_cotacao)
 
                 # Converte USD→BRL se for "Ação EUA"
                 preco_atual_brl = float(preco_atual_raw or 0.0)
