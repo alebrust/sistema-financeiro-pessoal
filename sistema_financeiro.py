@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict, Any, Tuple
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
+from pycoingecko import CoinGeckoAPI
 
 
 def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
@@ -323,6 +324,8 @@ class GerenciadorContas:
         # Cache de cotações
         self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
         self._cotacoes_ttl: int = 60  # segundos
+        self._cg = CoinGeckoAPI()  # Cliente CoinGecko
+        self._cg_cache_ids: Dict[str, str] = {}  # Cache de ticker -> coin_id
         self.carregar_dados()
 
     # ------------------------
@@ -654,6 +657,76 @@ class GerenciadorContas:
 
     def _agora_epoch(self) -> float:
         return time.time()
+
+    def _obter_coingecko_id(self, ticker: str) -> Optional[str]:
+    """
+    Mapeia ticker de cripto para CoinGecko ID.
+    Ex: BTC -> bitcoin, ETH -> ethereum, PEPE -> pepe
+    """
+    ticker_upper = ticker.upper().strip()
+    
+    # Cache para evitar múltiplas consultas
+    if ticker_upper in self._cg_cache_ids:
+        return self._cg_cache_ids[ticker_upper]
+    
+    # Mapeamento manual dos mais populares (performance)
+    mapeamento_comum = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum",
+        "BNB": "binancecoin",
+        "XRP": "ripple",
+        "ADA": "cardano",
+        "DOGE": "dogecoin",
+        "SOL": "solana",
+        "DOT": "polkadot",
+        "MATIC": "matic-network",
+        "SHIB": "shiba-inu",
+        "PEPE": "pepe",
+        "AVAX": "avalanche-2",
+        "LINK": "chainlink",
+        "UNI": "uniswap",
+        "LTC": "litecoin",
+        "ATOM": "cosmos",
+        "XLM": "stellar",
+        "USDT": "tether",
+        "USDC": "usd-coin",
+    }
+    
+    if ticker_upper in mapeamento_comum:
+        coin_id = mapeamento_comum[ticker_upper]
+        self._cg_cache_ids[ticker_upper] = coin_id
+        return coin_id
+    
+    # Busca dinâmica (fallback para criptos não mapeadas)
+    try:
+        lista = self._cg.get_coins_list()
+        ticker_lower = ticker.lower()
+        for coin in lista:
+            if coin["symbol"].lower() == ticker_lower:
+                coin_id = coin["id"]
+                self._cg_cache_ids[ticker_upper] = coin_id
+                return coin_id
+    except Exception:
+        pass
+    
+    return None
+
+    def _obter_preco_coingecko(self, ticker: str) -> float:
+    """
+    Busca preço atual da cripto no CoinGecko (em BRL).
+    """
+    coin_id = self._obter_coingecko_id(ticker)
+    if not coin_id:
+        raise ValueError(f"Cripto '{ticker}' não encontrada no CoinGecko")
+    
+    try:
+        data = self._cg.get_price(ids=coin_id, vs_currencies="brl")
+        preco_brl = data[coin_id]["brl"]
+        if preco_brl and float(preco_brl) > 0:
+            return float(preco_brl)
+        raise ValueError(f"Preço inválido para {ticker}")
+    except Exception as e:
+        raise ValueError(f"Erro ao buscar cotação de {ticker}: {str(e)}")
 
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
         t = (ticker or "").upper().strip()
