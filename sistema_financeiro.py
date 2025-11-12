@@ -755,75 +755,77 @@ class GerenciadorContas:
             return 1.0
 
     def calcular_posicao_conta_investimento(self, conta_id: str) -> dict:
-    # Calcula posição em BRL, convertendo 'Ação EUA' e 'Cripto' (USD) para BRL via USDBRL=X
-    conta = None
-    for c in getattr(self, "contas", []):
-        if getattr(c, "id_conta", None) == conta_id and hasattr(c, "ativos") and hasattr(c, "saldo_caixa"):
-            conta = c
-            break
+        # Calcula posição em BRL, convertendo 'Ação EUA' e 'Cripto' (USD) para BRL via USDBRL=X
+        conta = None
+        for c in getattr(self, "contas", []):
+            if getattr(c, "id_conta", None) == conta_id and hasattr(c, "ativos") and hasattr(c, "saldo_caixa"):
+                conta = c
+                break
 
-    if conta is None:
+        if conta is None:
+            return {
+                "saldo_caixa": 0.0,
+                "total_valor_atual_ativos": 0.0,
+                "patrimonio_atualizado": 0.0,
+                "ativos": []
+            }
+
+        itens = []
+        total_valor_atual_ativos = 0.0
+        saldo_caixa = float(getattr(conta, "saldo_caixa", 0.0) or 0.0)
+
+        for ativo in getattr(conta, "ativos", []):
+            try:
+                ticker = getattr(ativo, "ticker", "")
+                tipo_ativo = getattr(ativo, "tipo_ativo", "")
+                quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
+                preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL
+
+                # Normaliza símbolo para yfinance (ex.: BR -> .SA, Cripto -> -USD)
+                symbol = self._normalizar_ticker(ticker, tipo_ativo)
+
+                # Preço atual bruto (USD para EUA e Cripto; BRL para BR .SA)
+                preco_atual_raw = self._obter_preco_atual_seguro(symbol)
+
+                # Converte USD→BRL se for "Ação EUA" ou "Cripto"
+                preco_atual_brl = float(preco_atual_raw or 0.0)
+                if tipo_ativo in ("Ação EUA", "Cripto"):
+                    fx = self._obter_fx_usd_brl()
+                    preco_atual_brl = float(preco_atual_raw) * float(fx)
+
+                # Cálculos em BRL
+                valor_atual = quantidade * preco_atual_brl
+                custo_total = quantidade * preco_medio_brl
+                pl_reais = valor_atual - custo_total
+                pl_pct = (pl_reais / custo_total) * 100 if custo_total > 0 else 0.0
+
+                itens.append({
+                    "ticker": ticker,
+                    "tipo": tipo_ativo,
+                    "quantidade": quantidade,
+                    "preco_medio": preco_medio_brl,
+                    "preco_atual": preco_atual_brl,
+                    "valor_atual": valor_atual,
+                    "pl": pl_reais,
+                    "pl_pct": pl_pct,
+                })
+
+                total_valor_atual_ativos += valor_atual
+
+            except Exception:
+                # Ignora ativo problemático e continua
+                continue
+
+        patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
+
         return {
-            "saldo_caixa": 0.0,
-            "total_valor_atual_ativos": 0.0,
-            "patrimonio_atualizado": 0.0,
-            "ativos": []
+            "saldo_caixa": float(saldo_caixa),
+            "total_valor_atual_ativos": float(total_valor_atual_ativos),
+            "patrimonio_atualizado": float(patrimonio_atualizado),
+            "ativos": itens
         }
 
-    itens = []
-    total_valor_atual_ativos = 0.0
-    saldo_caixa = float(getattr(conta, "saldo_caixa", 0.0) or 0.0)
-
-    for ativo in getattr(conta, "ativos", []):
-        try:
-            ticker = getattr(ativo, "ticker", "")
-            tipo_ativo = getattr(ativo, "tipo_ativo", "")
-            quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
-            preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL no seu fluxo
-
-            # Normaliza símbolo para yfinance (ex.: BR -> .SA, Cripto -> -USD)
-            symbol = self._normalizar_ticker(ticker, tipo_ativo)
-
-            # Preço atual bruto (USD para EUA e Cripto; BRL para BR .SA)
-            preco_atual_raw = self._obter_preco_atual_seguro(symbol)
-
-            # Converte USD→BRL se for "Ação EUA" ou "Cripto"
-            preco_atual_brl = float(preco_atual_raw or 0.0)
-            if tipo_ativo in ("Ação EUA", "Cripto"):
-                fx = self._obter_fx_usd_brl()
-                preco_atual_brl = float(preco_atual_raw) * float(fx)
-
-            # Cálculos em BRL
-            valor_atual = quantidade * preco_atual_brl
-            custo_total = quantidade * preco_medio_brl
-            pl_reais = valor_atual - custo_total
-            pl_pct = (pl_reais / custo_total) * 100 if custo_total > 0 else 0.0
-
-            itens.append({
-                "ticker": ticker,
-                "tipo": tipo_ativo,
-                "quantidade": quantidade,
-                "preco_medio": preco_medio_brl,   # BRL
-                "preco_atual": preco_atual_brl,   # BRL (convertido se "Ação EUA" ou "Cripto")
-                "valor_atual": valor_atual,       # BRL
-                "pl": pl_reais,                   # BRL
-                "pl_pct": pl_pct,                 # %
-            })
-
-            total_valor_atual_ativos += valor_atual
-
-        except Exception:
-            # Ignora ativo problemático e continua
-            continue
-
-    patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
-
-    return {
-        "saldo_caixa": float(saldo_caixa),
-        "total_valor_atual_ativos": float(total_valor_atual_ativos),
-        "patrimonio_atualizado": float(patrimonio_atualizado),
-        "ativos": itens
-    }
+    
     # ------------------------
     # Cartões
     # ------------------------
