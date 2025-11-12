@@ -771,6 +771,69 @@ class GerenciadorContas:
 
         raise ValueError(f"Cotação indisponível para {symbol}")
 
+    def _obter_preco_yf(self, symbol: str) -> float:
+        tk = yf.Ticker(symbol)
+
+        try:
+            fi = getattr(tk, "fast_info", None)
+            if fi:
+                last = fi.get("last_price") or fi.get("lastPrice")
+                if last is None:
+                    last = fi.get("last_price")
+                if last is not None and float(last) > 0:
+                    return float(last)
+        except Exception:
+            pass
+
+        try:
+            hist = tk.history(period="1d")
+            if hist is not None and not hist.empty:
+                last = hist["Close"].iloc[-1]
+                if last is not None and float(last) > 0:
+                    return float(last)
+        except Exception:
+            pass
+
+        try:
+            info = tk.info or {}
+            last = info.get("regularMarketPrice")
+            if last is not None and float(last) > 0:
+                return float(last)
+        except Exception:
+            pass
+
+        raise ValueError(f"Cotação indisponível para {symbol}")
+
+    def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
+        # Para criptos, usa CoinGecko diretamente (sem normalização de ticker)
+        if tipo_ativo == "Cripto":
+            cache_key = f"CG_{ticker.upper()}"
+            now = self._agora_epoch()
+            cached = self._cotacoes_cache.get(cache_key)
+            if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
+                return cached.get("preco")
+            
+            try:
+                preco = self._obter_preco_coingecko(ticker)
+                self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
+                return preco
+            except Exception:
+                return None
+        
+        # Para ações e FIIs, usa yfinance (com normalização)
+        symbol = self._normalizar_ticker(ticker, tipo_ativo)
+        now = self._agora_epoch()
+        cached = self._cotacoes_cache.get(symbol)
+        if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
+            return cached.get("preco")
+
+        try:
+            preco = self._obter_preco_yf(symbol)
+            self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
+            return preco
+        except Exception:
+            return None
+    
     def _obter_preco_atual_seguro(self, ticker: str) -> float:
         # Obtém o preço atual do ticker com cache. Fallback via yfinance; retorna 0.0 em erro.
         try:
