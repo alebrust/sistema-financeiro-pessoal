@@ -712,21 +712,21 @@ class GerenciadorContas:
         return None    
   
     def _obter_preco_coingecko(self, ticker: str) -> float:
-    """
-    Busca preço atual da cripto no CoinGecko (em BRL).
-    """
-    coin_id = self._obter_coingecko_id(ticker)
-    if not coin_id:
-        raise ValueError(f"Cripto '{ticker}' não encontrada no CoinGecko")
-    
-    try:
-        data = self._cg.get_price(ids=coin_id, vs_currencies="brl")
-        preco_brl = data[coin_id]["brl"]
-        if preco_brl and float(preco_brl) > 0:
-            return float(preco_brl)
-        raise ValueError(f"Preço inválido para {ticker}")
-    except Exception as e:
-        raise ValueError(f"Erro ao buscar cotação de {ticker}: {str(e)}")
+        """
+        Busca preço atual da cripto no CoinGecko (em BRL).
+        """
+        coin_id = self._obter_coingecko_id(ticker)
+        if not coin_id:
+            raise ValueError(f"Cripto '{ticker}' não encontrada no CoinGecko")
+        
+        try:
+            data = self._cg.get_price(ids=coin_id, vs_currencies="brl")
+            preco_brl = data[coin_id]["brl"]
+            if preco_brl and float(preco_brl) > 0:
+                return float(preco_brl)
+            raise ValueError(f"Preço inválido para {ticker}")
+        except Exception as e:
+            raise ValueError(f"Erro ao buscar cotação de {ticker}: {str(e)}")    
 
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
         t = (ticker or "").upper().strip()
