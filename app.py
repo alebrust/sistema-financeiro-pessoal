@@ -457,9 +457,9 @@ with tab_contas:
                                           "Quantidade": _fmt_num6,
                                           "Preço Médio": _fmt_preco_cripto,
                                           "Preço Atual": _fmt_preco_cripto,
-                                          "Valor Atual": _fmt_preco_cripto,
-                                          "P/L (R$)": _fmt_moeda_base,
-                                          "P/L (%)": _fmt_pct,
+                                          "Valor Atual": lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                          "P/L (R$)": lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                          "P/L (%)": lambda v: f"{v:,.2f}%".replace(",", "X").replace(".", ",").replace("X", "."),
                                       })
                                       .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
                                       .hide(axis="index")
