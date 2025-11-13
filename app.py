@@ -421,6 +421,20 @@ with tab_contas:
                                     # Se valor < 1, formata com até 6 casas (ex.: 0,000123)
                                     else:
                                         return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                                def _fmt_preco_cripto(v: float) -> str:
+                                    """Formata preços incluindo criptos de centavos (pode ter até 8 casas)"""
+                                    if pd.isna(v):
+                                        return ""
+                                    if v >= 1000:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 0.01:
+                                        return f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        # Para valores muito pequenos (< 0,01), mostra até 8 casas
+                                        return f"R$ {v:,.8f}".replace(",", "X").replace(".", ",").replace("X", ".")
                                 
                                 def _fmt_moeda(v: float) -> str:
                                     if pd.isna(v):
@@ -441,10 +455,10 @@ with tab_contas:
                                     df.style
                                       .format({
                                           "Quantidade": _fmt_num6,
-                                          "Preço Médio": _fmt_moeda,
-                                          "Preço Atual": _fmt_moeda,
-                                          "Valor Atual": _fmt_moeda,
-                                          "P/L (R$)": _fmt_moeda,
+                                          "Preço Médio": _fmt_preco_cripto,
+                                          "Preço Atual": _fmt_preco_cripto,
+                                          "Valor Atual": _fmt_preco_cripto,
+                                          "P/L (R$)": _fmt_preco_cripto,
                                           "P/L (%)": _fmt_pct,
                                       })
                                       .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
@@ -479,7 +493,15 @@ with tab_contas:
                                 def _fmt_moeda_base(v: float) -> str:
                                     if pd.isna(v):
                                         return ""
-                                    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    if v >= 1000:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 0.01:
+                                        return f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        # Para valores muito pequenos (< 0,01), mostra até 8 casas
+                                        return f"R$ {v:,.8f}".replace(",", "X").replace(".", ",").replace("X", ".")
                                 
                                 styled_base = (
                                     df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]]
