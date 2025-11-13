@@ -458,7 +458,7 @@ with tab_contas:
                                           "Preço Médio": _fmt_preco_cripto,
                                           "Preço Atual": _fmt_preco_cripto,
                                           "Valor Atual": _fmt_preco_cripto,
-                                          "P/L (R$)": _fmt_preco_cripto,
+                                          "P/L (R$)": _fmt_moeda_base,
                                           "P/L (%)": _fmt_pct,
                                       })
                                       .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
