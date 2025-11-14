@@ -633,46 +633,18 @@ class GerenciadorContas:
         
         # Registra a transação de venda
         nova_transacao = Transacao(
-            data=data_venda,
             tipo="Receita",
             categoria="Venda de Investimento",
             descricao=descricao,
             valor=valor_venda,
             id_conta=id_conta,
         )
+        # Define a data manualmente após a criação
+        nova_transacao.data = datetime.strptime(data_venda, "%Y-%m-%d")
         self.transacoes.append(nova_transacao)
         
         return True, f"Venda registrada com sucesso! {descricao}"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 
     def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
         return next((c for c in self.contas if c.id_conta == id_conta), None)
