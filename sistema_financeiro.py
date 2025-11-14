@@ -852,10 +852,11 @@ class GerenciadorContas:
     def _obter_preco_tesouro(self, ticker: str) -> Optional[float]:
         """
         Obtém o preço unitário de um título do Tesouro Direto via API oficial.
-        Ticker deve ser no formato: "Tesouro Selic 2029", "Tesouro IPCA+ 2035", etc.
+        Ticker deve ser no formato: "Tesouro Selic 2029", "Tesouro IPCA+ 2035", "Tesouro RendA+ 2065", etc.
         """
         try:
             import requests
+            import re
             
             # API oficial do Tesouro Nacional
             url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
@@ -869,8 +870,16 @@ class GerenciadorContas:
             if len(linhas) < 2:
                 return None
             
-            # Normaliza o ticker para busca
-            ticker_normalizado = ticker.strip().upper()
+            # Normaliza o ticker para busca (remove acentos, espaços extras, case insensitive)
+            def normalizar(texto):
+                texto = texto.upper().strip()
+                texto = re.sub(r'\s+', ' ', texto)  # Remove espaços múltiplos
+                # Remove acentos
+                texto = texto.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+                texto = texto.replace('Ó', 'O').replace('Ú', 'U').replace('Ã', 'A')
+                return texto
+            
+            ticker_normalizado = normalizar(ticker)
             
             for linha in linhas[1:]:  # Pula cabeçalho
                 campos = linha.split(';')
@@ -882,14 +891,20 @@ class GerenciadorContas:
                 pu_venda = campos[6].strip().replace(',', '.')
                 
                 # Monta o nome do título (ex: "Tesouro Selic 2029")
-                nome_titulo = f"{tipo_titulo} {vencimento[:4]}".upper()
+                nome_titulo = f"{tipo_titulo} {vencimento[:4]}"
+                nome_titulo_normalizado = normalizar(nome_titulo)
                 
-                if ticker_normalizado in nome_titulo or nome_titulo in ticker_normalizado:
+                # Busca flexível (bidirecional)
+                if ticker_normalizado in nome_titulo_normalizado or nome_titulo_normalizado in ticker_normalizado:
                     try:
                         return float(pu_venda)
                     except ValueError:
                         continue
             
+            return None
+        
+        except Exception as e:
+            print(f"Erro ao obter preço do Tesouro Direto {ticker}: {e}")
             return None
         
         except Exception as e:
