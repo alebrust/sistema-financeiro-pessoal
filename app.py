@@ -66,8 +66,26 @@ with tab_dashboard:
                         format_func=lambda cid: mapa_ci[cid].nome,
                         key="buy_asset_conta_destino_id"
                     )
-                    ticker = st.text_input("Ticker do Ativo (ex: PETR4, AAPL)").upper()
-                    tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Outro"])
+                    ticker_input = st.text_input("Ticker do Ativo (ex: PETR4, AAPL, Tesouro Selic 2029)")
+                    tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Tesouro Direto", "Outro"])
+                                        
+                    # Instruções de formato do ticker por tipo
+                    if tipo_ativo == "Tesouro Direto":
+                        st.info("💡 **Formato:** Digite o nome completo do título. Exemplos: 'Tesouro Selic 2029', 'Tesouro IPCA+ 2035', 'Tesouro Prefixado 2027'")
+                    elif tipo_ativo == "Cripto":
+                        st.info("💡 **Formato:** Use o símbolo da criptomoeda. Exemplos: 'BTC', 'ETH', 'PEPE', 'DOGE'")
+                    elif tipo_ativo == "Ação BR" or tipo_ativo == "FII":
+                        st.info("💡 **Formato:** Use o código da B3. Exemplos: 'PETR4', 'VALE3', 'MXRF11'")
+                    elif tipo_ativo == "Ação EUA":
+                        st.info("💡 **Formato:** Use o ticker da NYSE/NASDAQ. Exemplos: 'AAPL', 'MSFT', 'GOOGL'")
+
+                                        
+                    # Normaliza ticker conforme o tipo
+                    if tipo_ativo == "Tesouro Direto":
+                        ticker = ticker_input.strip()  # Mantém maiúsculas/minúsculas
+                    else:
+                        ticker = ticker_input.upper()  # Converte para maiúsculas
+                        
                     col_qnt, col_preco = st.columns(2)
                     with col_qnt:
                         quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
