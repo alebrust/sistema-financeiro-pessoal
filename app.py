@@ -95,60 +95,59 @@ with tab_dashboard:
 
 
         # Vender Ativo
-        st.subheader("📊 Vender Ativo")
-        contas_inv_venda = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
-        
-        if not contas_inv_venda:
-            st.info("Crie uma Conta de Investimento para vender ativos.")
-        else:
-            conta_venda_sel = st.selectbox("Conta de Investimento", contas_inv_venda, format_func=lambda x: x.nome, key="conta_venda_sel")
+        with st.expander("📊 Vender Ativo", expanded=False):
+            contas_inv_venda = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
             
-            # Lista os ativos disponíveis para venda
-            ativos_disponiveis = conta_venda_sel.ativos if conta_venda_sel.ativos else []
-            
-            if not ativos_disponiveis:
-                st.info("Não há ativos nesta conta para vender.")
+            if not contas_inv_venda:
+                st.info("Crie uma Conta de Investimento para vender ativos.")
             else:
-                ticker_venda = st.selectbox("Ativo para Vender", ativos_disponiveis, format_func=lambda x: f"{x.ticker} ({x.quantidade:.6f} disponível)", key="ticker_venda")
+                conta_venda_sel = st.selectbox("Conta de Investimento", contas_inv_venda, format_func=lambda x: x.nome, key="conta_venda_sel")
                 
-                col_venda1, col_venda2 = st.columns(2)
-                with col_venda1:
-                    qtd_venda = st.number_input("Quantidade a Vender", min_value=0.000001, max_value=float(ticker_venda.quantidade), value=float(ticker_venda.quantidade), step=0.01, format="%.6f", key="qtd_venda")
-                with col_venda2:
-                    preco_venda = st.number_input("Preço de Venda (R$ por unidade)", min_value=0.01, value=float(ticker_venda.preco_medio), step=0.01, format="%.2f", key="preco_venda")
+                # Lista os ativos disponíveis para venda
+                ativos_disponiveis = conta_venda_sel.ativos if conta_venda_sel.ativos else []
                 
-                # Calcula preview do P/L
-                valor_venda_preview = qtd_venda * preco_venda
-                custo_medio_preview = qtd_venda * ticker_venda.preco_medio
-                pl_preview = valor_venda_preview - custo_medio_preview
-                pl_pct_preview = (pl_preview / custo_medio_preview * 100) if custo_medio_preview > 0 else 0
-                
-                if pl_preview >= 0:
-                    st.success(f"💰 **Lucro Estimado:** R$ {pl_preview:.2f} ({pl_pct_preview:+.2f}%)")
+                if not ativos_disponiveis:
+                    st.info("Não há ativos nesta conta para vender.")
                 else:
-                    st.error(f"📉 **Prejuízo Estimado:** R$ {abs(pl_preview):.2f} ({pl_pct_preview:.2f}%)")
-                
-                data_venda = st.date_input("Data da Venda", value=datetime.today(), key="data_venda")
-                obs_venda = st.text_input("Observação (opcional)", key="obs_venda")
-                
-                if st.button("✅ Confirmar Venda", type="primary", key="vender_btn"):
-                    sucesso, mensagem = st.session_state.gerenciador.vender_ativo(
-                        id_conta=conta_venda_sel.id_conta,
-                        ticker=ticker_venda.ticker,
-                        quantidade=qtd_venda,
-                        preco_venda=preco_venda,
-                        data_venda=data_venda.strftime("%Y-%m-%d"),
-                        observacao=obs_venda
-                    )
-                    if sucesso:
-                        st.session_state.gerenciador.salvar_dados()
-                        st.success(mensagem)
-                        st.rerun()
+                    ticker_venda = st.selectbox("Ativo para Vender", ativos_disponiveis, format_func=lambda x: f"{x.ticker} ({x.quantidade:.6f} disponível)", key="ticker_venda")
+                    
+                    col_venda1, col_venda2 = st.columns(2)
+                    with col_venda1:
+                        qtd_venda = st.number_input("Quantidade a Vender", min_value=0.000001, max_value=float(ticker_venda.quantidade), value=float(ticker_venda.quantidade), step=0.01, format="%.6f", key="qtd_venda")
+                    with col_venda2:
+                        preco_venda = st.number_input("Preço de Venda (R$ por unidade)", min_value=0.01, value=float(ticker_venda.preco_medio), step=0.01, format="%.2f", key="preco_venda")
+                    
+                    # Calcula preview do P/L
+                    valor_venda_preview = qtd_venda * preco_venda
+                    custo_medio_preview = qtd_venda * ticker_venda.preco_medio
+                    pl_preview = valor_venda_preview - custo_medio_preview
+                    pl_pct_preview = (pl_preview / custo_medio_preview * 100) if custo_medio_preview > 0 else 0
+                    
+                    if pl_preview >= 0:
+                        st.success(f"💰 **Lucro Estimado:** R$ {pl_preview:.2f} ({pl_pct_preview:+.2f}%)")
                     else:
-                        st.error(mensagem)
-      
+                        st.error(f"📉 **Prejuízo Estimado:** R$ {abs(pl_preview):.2f} ({pl_pct_preview:.2f}%)")
+                    
+                    data_venda = st.date_input("Data da Venda", value=datetime.today(), key="data_venda")
+                    obs_venda = st.text_input("Observação (opcional)", key="obs_venda")
+                    
+                    if st.button("✅ Confirmar Venda", type="primary", key="vender_btn"):
+                        sucesso, mensagem = st.session_state.gerenciador.vender_ativo(
+                            id_conta=conta_venda_sel.id_conta,
+                            ticker=ticker_venda.ticker,
+                            quantidade=qtd_venda,
+                            preco_venda=preco_venda,
+                            data_venda=data_venda.strftime("%Y-%m-%d"),
+                            observacao=obs_venda
+                        )
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.success(mensagem)
+                            st.rerun()
+                        else:
+                            st.error(mensagem)
 
-        # --------------------------
+         # --------------------------
         # Registrar Receita/Despesa (por ID, exibindo apenas nome)
         # --------------------------
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
