@@ -858,28 +858,42 @@ class GerenciadorContas:
             import requests
             import re
             
+            print(f"[DEBUG] Buscando cotação para: {ticker}")
+            
             # API oficial do Tesouro Nacional
             url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
             
             response = requests.get(url, timeout=10)
+            print(f"[DEBUG] Status da API: {response.status_code}")
+            
             if response.status_code != 200:
                 return None
             
             # Parse CSV
             linhas = response.text.strip().split('\n')
+            print(f"[DEBUG] Total de linhas no CSV: {len(linhas)}")
+            
             if len(linhas) < 2:
                 return None
             
-            # Normaliza o ticker para busca (remove acentos, espaços extras, case insensitive)
+            # Normaliza o ticker para busca
             def normalizar(texto):
                 texto = texto.upper().strip()
-                texto = re.sub(r'\s+', ' ', texto)  # Remove espaços múltiplos
-                # Remove acentos
+                texto = re.sub(r'\s+', ' ', texto)
                 texto = texto.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
                 texto = texto.replace('Ó', 'O').replace('Ú', 'U').replace('Ã', 'A')
+                texto = texto.replace('+', '')  # Remove + para melhorar matching
                 return texto
             
             ticker_normalizado = normalizar(ticker)
+            print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
+            
+            # Extrai apenas o ano do ticker (ex: "2065")
+            ano_match = re.search(r'(\d{4})', ticker)
+            ano_busca = ano_match.group(1) if ano_match else None
+            print(f"[DEBUG] Ano extraído: {ano_busca}")
+            
+            titulos_encontrados = []
             
             for linha in linhas[1:]:  # Pula cabeçalho
                 campos = linha.split(';')
@@ -888,27 +902,62 @@ class GerenciadorContas:
                 
                 tipo_titulo = campos[1].strip()
                 vencimento = campos[2].strip()
-                pu_venda = campos[6].strip().replace(',', '.')
+                pu_venda = campos[6].strip()
                 
-                # Monta o nome do título (ex: "Tesouro Selic 2029")
+                # Monta o nome do título
                 nome_titulo = f"{tipo_titulo} {vencimento[:4]}"
                 nome_titulo_normalizado = normalizar(nome_titulo)
                 
-                # Busca flexível (bidirecional)
-                if ticker_normalizado in nome_titulo_normalizado or nome_titulo_normalizado in ticker_normalizado:
-                    try:
-                        return float(pu_venda)
-                    except ValueError:
-                        continue
+                # Verifica se é o título procurado
+                ano_titulo = vencimento[:4] if len(vencimento) >= 4 else None
+                
+                # Busca por ano E tipo
+                if ano_busca and ano_titulo == ano_busca:
+                    if "RENDA" in ticker_normalizado and "RENDA" in nome_titulo_normalizado:
+                        titulos_encontrados.append((nome_titulo, pu_venda))
+                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        try:
+                            preco = float(pu_venda.replace(',', '.'))
+                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
+                            return preco
+                        except ValueError:
+                            continue
+                    elif "SELIC" in ticker_normalizado and "SELIC" in nome_titulo_normalizado:
+                        titulos_encontrados.append((nome_titulo, pu_venda))
+                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        try:
+                            preco = float(pu_venda.replace(',', '.'))
+                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
+                            return preco
+                        except ValueError:
+                            continue
+                    elif "IPCA" in ticker_normalizado and "IPCA" in nome_titulo_normalizado:
+                        titulos_encontrados.append((nome_titulo, pu_venda))
+                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        try:
+                            preco = float(pu_venda.replace(',', '.'))
+                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
+                            return preco
+                        except ValueError:
+                            continue
+                    elif "PREFIXADO" in ticker_normalizado and "PREFIXADO" in nome_titulo_normalizado:
+                        titulos_encontrados.append((nome_titulo, pu_venda))
+                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        try:
+                            preco = float(pu_venda.replace(',', '.'))
+                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
+                            return preco
+                        except ValueError:
+                            continue
             
+            print(f"[DEBUG] ❌ Nenhum título encontrado para: {ticker}")
+            print(f"[DEBUG] Títulos disponíveis encontrados: {titulos_encontrados}")
             return None
         
         except Exception as e:
-            print(f"Erro ao obter preço do Tesouro Direto {ticker}: {e}")
-            return None
-        
-        except Exception as e:
-            print(f"Erro ao obter preço do Tesouro Direto {ticker}: {e}")
+            print(f"[DEBUG] ❌ ERRO: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
@@ -1125,12 +1174,20 @@ class GerenciadorContas:
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
                 preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL
 
-                # Normaliza símbolo para yfinance (ex.: BR -> .SA, Cripto -> -USD)
-                symbol = self._normalizar_ticker(ticker, tipo_ativo)
-
-                # Preço atual bruto (USD para EUA e Cripto; BRL para BR .SA)
-                preco_atual_raw = self._obter_preco_atual_seguro(symbol)
-
+                # Obtém preço atual conforme o tipo de ativo
+                if tipo_ativo == "Tesouro Direto":
+                    # Usa o método específico do Tesouro (não normaliza ticker)
+                    preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
+                    if preco_atual_brl is None:
+                        preco_atual_brl = 0.0
+                else:
+                    # Normaliza símbolo para yfinance (ex.: BR -> .SA, Cripto -> -USD)
+                    symbol = self._normalizar_ticker(ticker, tipo_ativo)
+                    
+                    # Preço atual bruto (USD para EUA e Cripto; BRL para BR .SA)
+                    preco_atual_raw = self._obter_preco_atual_seguro(symbol)
+                    
+                    
                 # Converte USD→BRL se for "Ação EUA" ou "Cripto"
                 preco_atual_brl = float(preco_atual_raw or 0.0)
                 if tipo_ativo in ("Ação EUA", "Cripto"):
