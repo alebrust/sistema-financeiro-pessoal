@@ -128,7 +128,7 @@ with tab_dashboard:
                     else:
                         st.error(f"📉 **Prejuízo Estimado:** R$ {abs(pl_preview):.2f} ({pl_pct_preview:.2f}%)")
                     
-                    data_venda = st.date_input("Data da Venda", value=datetime.today(), key="data_venda")
+                    data_venda = st.date_input("Data da Venda", value=datetime.today(), format="DD/MM/YYYY", key="data_venda")
                     obs_venda = st.text_input("Observação (opcional)", key="obs_venda")
                     
                     if st.button("✅ Confirmar Venda", type="primary", key="vender_btn"):
