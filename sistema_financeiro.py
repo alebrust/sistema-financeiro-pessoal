@@ -581,6 +581,99 @@ class GerenciadorContas:
         
         return True
 
+
+
+    def vender_ativo(self, id_conta: str, ticker: str, quantidade: float, preco_venda: float, data_venda: str, observacao: str = "") -> tuple[bool, str]:
+        """
+        Vende uma quantidade de um ativo e registra a transação com lucro/prejuízo.
+        Retorna (sucesso: bool, mensagem: str)
+        """
+        conta = self.buscar_conta_por_id(id_conta)
+        if not conta or not isinstance(conta, ContaInvestimento):
+            return False, "Conta de investimento não encontrada."
+        
+        # Busca o ativo na conta
+        ativo = next((a for a in conta.ativos if a.ticker == ticker), None)
+        if not ativo:
+            return False, f"Ativo {ticker} não encontrado na conta."
+        
+        # Verifica se há quantidade suficiente
+        if ativo.quantidade < quantidade:
+            return False, f"Quantidade insuficiente. Você tem {ativo.quantidade:.6f} de {ticker}."
+        
+        # Calcula o valor da venda
+        valor_venda = quantidade * preco_venda
+        
+        # Calcula o custo médio dessa quantidade vendida
+        custo_medio = quantidade * ativo.preco_medio
+        
+        # Calcula o lucro/prejuízo
+        lucro_prejuizo = valor_venda - custo_medio
+        lucro_prejuizo_pct = (lucro_prejuizo / custo_medio * 100) if custo_medio > 0 else 0
+        
+        # Monta a descrição com P/L
+        if lucro_prejuizo >= 0:
+            descricao = f"Venda de {ticker} | Lucro: R$ {lucro_prejuizo:.2f} ({lucro_prejuizo_pct:+.2f}%)"
+        else:
+            descricao = f"Venda de {ticker} | Prejuízo: R$ {abs(lucro_prejuizo):.2f} ({lucro_prejuizo_pct:.2f}%)"
+        
+        # Adiciona observação se fornecida
+        if observacao:
+            descricao += f" | {observacao}"
+        
+        # Remove a quantidade do ativo
+        ativo.quantidade -= quantidade
+        
+        # Se zerou, remove o ativo da lista
+        if ativo.quantidade <= 0:
+            conta.ativos = [a for a in conta.ativos if a.ticker != ticker]
+        
+        # Adiciona o valor da venda ao saldo em caixa
+        conta.saldo_caixa += valor_venda
+        
+        # Registra a transação de venda
+        nova_transacao = Transacao(
+            data=data_venda,
+            tipo="Receita",
+            categoria="Venda de Investimento",
+            descricao=descricao,
+            valor=valor_venda,
+            id_conta=id_conta,
+        )
+        self.transacoes.append(nova_transacao)
+        
+        return True, f"Venda registrada com sucesso! {descricao}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
     def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
         return next((c for c in self.contas if c.id_conta == id_conta), None)
 
