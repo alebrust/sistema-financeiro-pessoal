@@ -847,7 +847,54 @@ class GerenciadorContas:
                 return float(preco_brl)
             raise ValueError(f"Preço inválido para {ticker}")
         except Exception as e:
-            raise ValueError(f"Erro ao buscar cotação de {ticker}: {str(e)}")    
+            raise ValueError(f"Erro ao buscar cotação de {ticker}: {str(e)}")
+
+    def _obter_preco_tesouro(self, ticker: str) -> Optional[float]:
+        """
+        Obtém o preço unitário de um título do Tesouro Direto via API oficial.
+        Ticker deve ser no formato: "Tesouro Selic 2029", "Tesouro IPCA+ 2035", etc.
+        """
+        try:
+            import requests
+            
+            # API oficial do Tesouro Nacional
+            url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
+            
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200:
+                return None
+            
+            # Parse CSV
+            linhas = response.text.strip().split('\n')
+            if len(linhas) < 2:
+                return None
+            
+            # Normaliza o ticker para busca
+            ticker_normalizado = ticker.strip().upper()
+            
+            for linha in linhas[1:]:  # Pula cabeçalho
+                campos = linha.split(';')
+                if len(campos) < 7:
+                    continue
+                
+                tipo_titulo = campos[1].strip()
+                vencimento = campos[2].strip()
+                pu_venda = campos[6].strip().replace(',', '.')
+                
+                # Monta o nome do título (ex: "Tesouro Selic 2029")
+                nome_titulo = f"{tipo_titulo} {vencimento[:4]}".upper()
+                
+                if ticker_normalizado in nome_titulo or nome_titulo in ticker_normalizado:
+                    try:
+                        return float(pu_venda)
+                    except ValueError:
+                        continue
+            
+            return None
+        
+        except Exception as e:
+            print(f"Erro ao obter preço do Tesouro Direto {ticker}: {e}")
+            return None
 
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
         t = (ticker or "").upper().strip()
@@ -926,33 +973,58 @@ class GerenciadorContas:
         raise ValueError(f"Cotação indisponível para {symbol}")
 
     def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
-        # Para criptos, usa CoinGecko diretamente (sem normalização de ticker)
-        if tipo_ativo == "Cripto":
-            cache_key = f"CG_{ticker.upper()}"
+        """
+        Retorna o preço atual (em BRL) de um ativo.
+        - Tesouro Direto: usa API do Tesouro Nacional
+        - Criptomoedas: usa CoinGecko
+        - Ações EUA: usa yfinance com conversão USD→BRL
+        - Ações BR/FII: usa yfinance
+        """
+        try:
+            # Tesouro Direto - API oficial
+            if tipo_ativo == "Tesouro Direto":
+                cache_key = f"TD_{ticker.upper()}"
+                now = self._agora_epoch()
+                cached = self._cotacoes_cache.get(cache_key)
+                if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
+                    return cached.get("preco")
+                
+                preco = self._obter_preco_tesouro(ticker)
+                if preco:
+                    self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
+                return preco
+            
+            # Criptomoedas - CoinGecko
+            if tipo_ativo == "Cripto":
+                cache_key = f"CG_{ticker.upper()}"
+                now = self._agora_epoch()
+                cached = self._cotacoes_cache.get(cache_key)
+                if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
+                    return cached.get("preco")
+                
+                try:
+                    preco = self._obter_preco_coingecko(ticker)
+                    self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
+                    return preco
+                except Exception:
+                    return None
+            
+            # Ações e FIIs - yfinance (com normalização)
+            symbol = self._normalizar_ticker(ticker, tipo_ativo)
             now = self._agora_epoch()
-            cached = self._cotacoes_cache.get(cache_key)
+            cached = self._cotacoes_cache.get(symbol)
             if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
                 return cached.get("preco")
-            
+
             try:
-                preco = self._obter_preco_coingecko(ticker)
-                self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
+                preco = self._obter_preco_yf(symbol)
+                self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
                 return preco
             except Exception:
                 return None
         
-        # Para ações e FIIs, usa yfinance (com normalização)
-        symbol = self._normalizar_ticker(ticker, tipo_ativo)
-        now = self._agora_epoch()
-        cached = self._cotacoes_cache.get(symbol)
-        if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
-            return cached.get("preco")
-
-        try:
-            preco = self._obter_preco_yf(symbol)
-            self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
-            return preco
-        except Exception:
+        except Exception as e:
+            print(f"Erro ao obter preço de {ticker} ({tipo_ativo}): {e}")
             return None
     
     def _obter_preco_atual_seguro(self, ticker: str) -> float:
