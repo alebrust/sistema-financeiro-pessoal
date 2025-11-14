@@ -631,20 +631,21 @@ class GerenciadorContas:
         # Adiciona o valor da venda ao saldo em caixa
         conta.saldo_caixa += valor_venda
         
-        # Registra a transação de venda
+        # Converte a string de data para objeto date
+        data_venda_obj = datetime.strptime(data_venda, "%Y-%m-%d").date()
+        
+        # Registra a transação de venda com a ordem correta de parâmetros
         nova_transacao = Transacao(
-            tipo="Receita",
-            categoria="Venda de Investimento",
+            id_conta=id_conta,
             descricao=descricao,
             valor=valor_venda,
-            id_conta=id_conta,
+            tipo="Receita",
+            data_transacao=data_venda_obj,
+            categoria="Venda de Investimento",
         )
-        # Define a data manualmente após a criação
-        nova_transacao.data = datetime.strptime(data_venda, "%Y-%m-%d")
         self.transacoes.append(nova_transacao)
         
         return True, f"Venda registrada com sucesso! {descricao}"
-
 
     def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
         return next((c for c in self.contas if c.id_conta == id_conta), None)
