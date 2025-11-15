@@ -1220,7 +1220,10 @@ class GerenciadorContas:
             return 1.0
 
     def calcular_posicao_conta_investimento(self, conta_id: str) -> dict:
-        # Calcula posição em BRL, convertendo 'Ação EUA' e 'Cripto' (USD) para BRL via USDBRL=X
+        """
+        Calcula posição em BRL, convertendo USD→BRL quando necessário.
+        Suporta: Ação BR, Ação EUA, FII, Cripto, Tesouro Direto.
+        """
         conta = None
         for c in getattr(self, "contas", []):
             if getattr(c, "id_conta", None) == conta_id and hasattr(c, "ativos") and hasattr(c, "saldo_caixa"):
@@ -1244,27 +1247,48 @@ class GerenciadorContas:
                 ticker = getattr(ativo, "ticker", "")
                 tipo_ativo = getattr(ativo, "tipo_ativo", "")
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
-                preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)  # já BRL
+                preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)
+
+                print(f"[DEBUG] Calculando posição de {ticker} ({tipo_ativo})")
 
                 # Obtém preço atual conforme o tipo de ativo
+                preco_atual_brl = None
+                
                 if tipo_ativo == "Tesouro Direto":
                     # Usa o método específico do Tesouro (não normaliza ticker)
                     preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                     if preco_atual_brl is None:
-                        preco_atual_brl = 0.0
+                        print(f"[DEBUG] ⚠️ Cotação não disponível para {ticker}, usando preço médio")
+                        preco_atual_brl = preco_medio_brl
+                    else:
+                        print(f"[DEBUG] ✅ Preço do Tesouro: R$ {preco_atual_brl:.2f}")
+                
+                elif tipo_ativo == "Cripto":
+                    # Usa CoinGecko (já retorna em BRL)
+                    preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
+                    if preco_atual_brl is None:
+                        print(f"[DEBUG] ⚠️ Cotação cripto indisponível para {ticker}, usando preço médio")
+                        preco_atual_brl = preco_medio_brl
+                    else:
+                        print(f"[DEBUG] ✅ Preço cripto: R$ {preco_atual_brl:.8f}")
+                
                 else:
-                    # Normaliza símbolo para yfinance (ex.: BR -> .SA, Cripto -> -USD)
+                    # Ações BR, FII, Ações EUA - usa yfinance
                     symbol = self._normalizar_ticker(ticker, tipo_ativo)
-                    
-                    # Preço atual bruto (USD para EUA e Cripto; BRL para BR .SA)
                     preco_atual_raw = self._obter_preco_atual_seguro(symbol)
                     
+                    preco_atual_brl = float(preco_atual_raw or 0.0)
                     
-                # Converte USD→BRL se for "Ação EUA" ou "Cripto"
-                preco_atual_brl = float(preco_atual_raw or 0.0)
-                if tipo_ativo in ("Ação EUA", "Cripto"):
-                    fx = self._obter_fx_usd_brl()
-                    preco_atual_brl = float(preco_atual_raw) * float(fx)
+                    # Converte USD→BRL se for "Ação EUA"
+                    if tipo_ativo == "Ação EUA" and preco_atual_brl > 0:
+                        fx = self._obter_fx_usd_brl()
+                        preco_atual_brl = float(preco_atual_raw) * float(fx)
+                        print(f"[DEBUG] Ação EUA: ${preco_atual_raw:.2f} x {fx:.2f} = R$ {preco_atual_brl:.2f}")
+                    
+                    # Se não conseguiu obter preço, usa o preço médio
+                    if preco_atual_brl == 0.0:
+                        print(f"[DEBUG] ⚠️ Cotação indisponível para {ticker}, usando preço médio")
+                        preco_atual_brl = preco_medio_brl
 
                 # Cálculos em BRL
                 valor_atual = quantidade * preco_atual_brl
@@ -1285,8 +1309,11 @@ class GerenciadorContas:
 
                 total_valor_atual_ativos += valor_atual
 
-            except Exception:
+            except Exception as e:
                 # Ignora ativo problemático e continua
+                print(f"[DEBUG] ❌ Erro ao processar {ticker}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
 
         patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
