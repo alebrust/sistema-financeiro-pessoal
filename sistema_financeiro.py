@@ -1207,40 +1207,31 @@ class GerenciadorContas:
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
                 preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)
 
-                # Obtém preço atual conforme o tipo de ativo
                 preco_atual_brl = None
                 
                 if tipo_ativo == "Tesouro Direto":
-                    # Usa o método específico do Tesouro (não normaliza ticker)
                     preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                     if preco_atual_brl is None:
                         preco_atual_brl = preco_medio_brl
-                    else:
-                                        
+                
                 elif tipo_ativo == "Cripto":
-                    # Usa CoinGecko (já retorna em BRL)
                     preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                     if preco_atual_brl is None:
-                       preco_atual_brl = preco_medio_brl
-                    
-                    else:
-                    # Ações BR, FII, Ações EUA - usa yfinance
+                        preco_atual_brl = preco_medio_brl
+                
+                else:
                     symbol = self._normalizar_ticker(ticker, tipo_ativo)
                     preco_atual_raw = self._obter_preco_atual_seguro(symbol)
                     
                     preco_atual_brl = float(preco_atual_raw or 0.0)
                     
-                    # Converte USD→BRL se for "Ação EUA"
                     if tipo_ativo == "Ação EUA" and preco_atual_brl > 0:
                         fx = self._obter_fx_usd_brl()
                         preco_atual_brl = float(preco_atual_raw) * float(fx)
-                        
                     
-                    # Se não conseguiu obter preço, usa o preço médio
                     if preco_atual_brl == 0.0:
                         preco_atual_brl = preco_medio_brl
 
-                # Cálculos em BRL
                 valor_atual = quantidade * preco_atual_brl
                 custo_total = quantidade * preco_medio_brl
                 pl_reais = valor_atual - custo_total
@@ -1259,10 +1250,7 @@ class GerenciadorContas:
 
                 total_valor_atual_ativos += valor_atual
 
-            except Exception as e:
-                # Ignora ativo problemático e continua
-                import traceback
-                traceback.print_exc()
+            except Exception:
                 continue
 
         patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
