@@ -876,9 +876,6 @@ class GerenciadorContas:
             if len(linhas) < 2:
                 return None
             
-            # Mostra o cabeçalho para entender a estrutura
-            print(f"[DEBUG] Cabeçalho: {linhas[0]}")
-            
             # Extrai apenas o ano do ticker (ex: "2065")
             ano_match = re.search(r'(\d{4})', ticker)
             ano_busca = ano_match.group(1) if ano_match else None
@@ -896,65 +893,68 @@ class GerenciadorContas:
             ticker_normalizado = normalizar(ticker)
             print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
             
+            # Estrutura do CSV:
+            # campos[0] = Tipo Titulo
+            # campos[1] = Data Vencimento
+            # campos[2] = Data Base
+            # campos[6] = PU Venda Manha
+            
             # Dicionário para armazenar apenas a última ocorrência de cada título
             ultimas_cotacoes = {}
-            titulos_2065 = []
+            titulos_ano_busca = []
             
-            for i, linha in enumerate(linhas[1:], start=1):  # Pula cabeçalho
+            for linha in linhas[1:]:  # Pula cabeçalho
                 campos = linha.split(';')
                 if len(campos) < 8:
                     continue
                 
-                data_base = campos[0].strip()
-                tipo_titulo = campos[1].strip()
-                vencimento = campos[2].strip()
+                tipo_titulo = campos[0].strip()
+                data_vencimento = campos[1].strip()
+                data_base = campos[2].strip()
                 pu_venda = campos[6].strip()
                 
-                # Mostra títulos com ano 2065 (para debug)
-                ano_titulo = vencimento[:4] if len(vencimento) >= 4 else None
-                if ano_titulo == "2065":
-                    titulos_2065.append(f"{tipo_titulo} {vencimento[:4]}")
+                # Extrai ano do vencimento (formato: DD/MM/YYYY)
+                ano_titulo = data_vencimento[-4:] if len(data_vencimento) >= 4 else None
+                
+                # Debug: mostra títulos do ano procurado
+                if ano_titulo == ano_busca:
+                    titulos_ano_busca.append(f"{tipo_titulo} {ano_titulo}")
                 
                 # Armazena apenas a última cotação de cada título (última linha = mais recente)
-                chave_titulo = f"{tipo_titulo}_{vencimento[:10]}"
+                chave_titulo = f"{tipo_titulo}_{data_vencimento}"
                 ultimas_cotacoes[chave_titulo] = {
                     'data': data_base,
                     'tipo': tipo_titulo,
-                    'vencimento': vencimento,
-                    'pu_venda': pu_venda
+                    'vencimento': data_vencimento,
+                    'pu_venda': pu_venda,
+                    'ano': ano_titulo
                 }
             
-            # Mostra títulos únicos de 2065 encontrados
-            titulos_2065_unicos = list(set(titulos_2065))
-            print(f"[DEBUG] Títulos de 2065 disponíveis: {titulos_2065_unicos}")
+            # Mostra títulos únicos do ano procurado
+            titulos_unicos = list(set(titulos_ano_busca))[:5]  # Limita a 5 para não poluir
+            print(f"[DEBUG] Títulos de {ano_busca} disponíveis (amostra): {titulos_unicos}")
             
             # Busca na última cotação de cada título
             for chave, dados in ultimas_cotacoes.items():
                 tipo_titulo = dados['tipo']
-                vencimento = dados['vencimento']
+                ano_titulo = dados['ano']
                 pu_venda = dados['pu_venda']
-                ano_titulo = vencimento[:4] if len(vencimento) >= 4 else None
-                
-                # Monta o nome do título
-                nome_titulo = f"{tipo_titulo} {ano_titulo}"
-                nome_titulo_normalizado = normalizar(nome_titulo)
                 
                 # Verifica se é o ano procurado
                 if ano_busca and ano_titulo == ano_busca:
-                    # Busca flexível por palavras-chave
-                    palavras_ticker = set(ticker_normalizado.split())
-                    palavras_titulo = set(nome_titulo_normalizado.split())
+                    # Monta o nome do título
+                    nome_titulo = f"{tipo_titulo} {ano_titulo}"
+                    nome_titulo_normalizado = normalizar(nome_titulo)
                     
-                    # Se "RENDA" está no ticker, procura por "RENDA" no título
+                    # Busca flexível por palavras-chave
                     if "RENDA" in ticker_normalizado and "RENDA" in nome_titulo_normalizado:
                         try:
                             preco = float(pu_venda.replace(',', '.'))
                             print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError as e:
-                            print(f"[DEBUG] Erro ao converter preço: {e}")
+                            print(f"[DEBUG] Erro ao converter preço '{pu_venda}': {e}")
                             continue
-                    # Outras buscas (SELIC, IPCA, etc.)
                     elif "SELIC" in ticker_normalizado and "SELIC" in nome_titulo_normalizado:
                         print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
                         try:
@@ -985,7 +985,7 @@ class GerenciadorContas:
             import traceback
             traceback.print_exc()
             return None
-
+            
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
         t = (ticker or "").upper().strip()
         if tipo_ativo in ("Ação BR", "FII"):
