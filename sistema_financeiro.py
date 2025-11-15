@@ -531,35 +531,27 @@ class GerenciadorContas:
         Remove uma transação pelo ID e reverte seus efeitos no saldo da conta.
         Se a transação for uma compra de investimento, reverte proporcionalmente os ativos.
         """
-        # Busca a transação
         transacao = next((t for t in self.transacoes if t.id_transacao == id_transacao), None)
         if not transacao:
             return False
         
-        # Busca a conta afetada
         conta = self.buscar_conta_por_id(transacao.id_conta)
         if not conta:
             return False
         
-        # Reverte o saldo conforme o tipo de transação
         if transacao.tipo == "Receita":
-            # Se foi receita, precisamos SUBTRAIR o valor (reverter o crédito)
             if isinstance(conta, ContaCorrente):
                 conta.saldo -= transacao.valor
             elif isinstance(conta, ContaInvestimento):
                 conta.saldo_caixa -= transacao.valor
         
         elif transacao.tipo == "Despesa":
-            # Se foi despesa, precisamos ADICIONAR o valor (reverter o débito)
             if isinstance(conta, ContaCorrente):
                 conta.saldo += transacao.valor
             elif isinstance(conta, ContaInvestimento):
-                # Verifica se é uma compra de investimento
                 if transacao.categoria == "Investimentos" and "Compra de" in transacao.descricao:
-                    # Extrai o ticker da descrição (formato: "Compra de TICKER")
                     ticker_desc = transacao.descricao.replace("Compra de ", "").strip()
                     
-                    # Busca o ativo correspondente (case-insensitive)
                     ativo = None
                     for a in conta.ativos:
                         if a.ticker.upper() == ticker_desc.upper():
@@ -567,30 +559,20 @@ class GerenciadorContas:
                             break
                     
                     if ativo:
-                        # Calcula a quantidade comprada nesta transação
-                        # Valor da transação / preço médio atual
                         quantidade_comprada = transacao.valor / ativo.preco_medio
-                                                                      
-                        # Remove a quantidade do ativo
                         ativo.quantidade -= quantidade_comprada
-                                                                       
-                        # Se a quantidade ficou zero ou negativa, remove o ativo
-                        if ativo.quantidade <= 0.000001:  # Threshold para evitar resíduos
+                        
+                        if ativo.quantidade <= 0.000001:
                             conta.ativos = [a for a in conta.ativos if a.ticker.upper() != ticker_desc.upper()]
                         else:
-                            # Atualiza a referência no array
                             for i, a in enumerate(conta.ativos):
                                 if a.ticker.upper() == ticker_desc.upper():
                                     conta.ativos[i] = ativo
                                     break
-                    else:
-                                        
-                # Devolve o valor para o saldo em caixa
+                
                 conta.saldo_caixa += transacao.valor
         
-        # Remove a transação da lista
         self.transacoes = [t for t in self.transacoes if t.id_transacao != id_transacao]
-                
         return True
 
 
