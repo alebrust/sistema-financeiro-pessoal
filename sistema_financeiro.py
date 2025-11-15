@@ -557,21 +557,40 @@ class GerenciadorContas:
                 # Verifica se é uma compra de investimento
                 if transacao.categoria == "Investimentos" and "Compra de" in transacao.descricao:
                     # Extrai o ticker da descrição (formato: "Compra de TICKER")
-                    ticker = transacao.descricao.replace("Compra de ", "").strip()
+                    ticker_desc = transacao.descricao.replace("Compra de ", "").strip()
                     
-                    # Busca o ativo correspondente
-                    ativo = next((a for a in conta.ativos if a.ticker == ticker), None)
+                    # Busca o ativo correspondente (case-insensitive)
+                    ativo = None
+                    for a in conta.ativos:
+                        if a.ticker.upper() == ticker_desc.upper():
+                            ativo = a
+                            break
+                    
                     if ativo:
                         # Calcula a quantidade comprada nesta transação
-                        # (valor da transação / preço médio atual)
+                        # Valor da transação / preço médio atual
                         quantidade_comprada = transacao.valor / ativo.preco_medio
+                        
+                        print(f"[DEBUG] Removendo {quantidade_comprada:.6f} de {ativo.ticker}")
+                        print(f"[DEBUG] Quantidade antes: {ativo.quantidade:.6f}")
                         
                         # Remove a quantidade do ativo
                         ativo.quantidade -= quantidade_comprada
                         
+                        print(f"[DEBUG] Quantidade depois: {ativo.quantidade:.6f}")
+                        
                         # Se a quantidade ficou zero ou negativa, remove o ativo
-                        if ativo.quantidade <= 0:
-                            conta.ativos = [a for a in conta.ativos if a.ticker != ticker]
+                        if ativo.quantidade <= 0.000001:  # Threshold para evitar resíduos
+                            print(f"[DEBUG] Removendo ativo {ativo.ticker} da conta (quantidade zerada)")
+                            conta.ativos = [a for a in conta.ativos if a.ticker.upper() != ticker_desc.upper()]
+                        else:
+                            # Atualiza a referência no array
+                            for i, a in enumerate(conta.ativos):
+                                if a.ticker.upper() == ticker_desc.upper():
+                                    conta.ativos[i] = ativo
+                                    break
+                    else:
+                        print(f"[DEBUG] ⚠️ Ativo {ticker_desc} não encontrado na conta para reversão")
                 
                 # Devolve o valor para o saldo em caixa
                 conta.saldo_caixa += transacao.valor
@@ -579,6 +598,7 @@ class GerenciadorContas:
         # Remove a transação da lista
         self.transacoes = [t for t in self.transacoes if t.id_transacao != id_transacao]
         
+        print(f"[DEBUG] ✅ Transação {id_transacao} removida com sucesso")
         return True
 
 
