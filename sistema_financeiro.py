@@ -570,18 +570,12 @@ class GerenciadorContas:
                         # Calcula a quantidade comprada nesta transação
                         # Valor da transação / preço médio atual
                         quantidade_comprada = transacao.valor / ativo.preco_medio
-                        
-                        print(f"[DEBUG] Removendo {quantidade_comprada:.6f} de {ativo.ticker}")
-                        print(f"[DEBUG] Quantidade antes: {ativo.quantidade:.6f}")
-                        
+                                                                      
                         # Remove a quantidade do ativo
                         ativo.quantidade -= quantidade_comprada
-                        
-                        print(f"[DEBUG] Quantidade depois: {ativo.quantidade:.6f}")
-                        
+                                                                       
                         # Se a quantidade ficou zero ou negativa, remove o ativo
                         if ativo.quantidade <= 0.000001:  # Threshold para evitar resíduos
-                            print(f"[DEBUG] Removendo ativo {ativo.ticker} da conta (quantidade zerada)")
                             conta.ativos = [a for a in conta.ativos if a.ticker.upper() != ticker_desc.upper()]
                         else:
                             # Atualiza a referência no array
@@ -590,15 +584,13 @@ class GerenciadorContas:
                                     conta.ativos[i] = ativo
                                     break
                     else:
-                        print(f"[DEBUG] ⚠️ Ativo {ticker_desc} não encontrado na conta para reversão")
-                
+                                        
                 # Devolve o valor para o saldo em caixa
                 conta.saldo_caixa += transacao.valor
         
         # Remove a transação da lista
         self.transacoes = [t for t in self.transacoes if t.id_transacao != id_transacao]
-        
-        print(f"[DEBUG] ✅ Transação {id_transacao} removida com sucesso")
+                
         return True
 
 
@@ -879,9 +871,7 @@ class GerenciadorContas:
             import requests
             import re
             from pathlib import Path
-            
-            print(f"[DEBUG] Buscando cotação para: {ticker}")
-            
+                                    
             # Configuração do cache local
             cache_dir = Path("cache_tesouro")
             cache_dir.mkdir(exist_ok=True)
@@ -894,31 +884,25 @@ class GerenciadorContas:
                 import time
                 idade_cache = time.time() - cache_file.stat().st_mtime
                 idade_cache_horas = idade_cache / 3600
-                print(f"[DEBUG] Cache local encontrado (idade: {idade_cache_horas:.1f}h)")
-                
+                                
                 if idade_cache_horas < cache_ttl_horas:
                     usar_cache = True
-                    print(f"[DEBUG] Usando cache local (válido por mais {cache_ttl_horas - idade_cache_horas:.1f}h)")
-            
+                                
             # Download do CSV (se necessário)
             if not usar_cache:
-                print(f"[DEBUG] Baixando dados do Tesouro Nacional (pode demorar 15-30s)...")
                 url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
                 
                 response = requests.get(url, timeout=30)  # Aumentado para 30s
-                print(f"[DEBUG] Status da API: {response.status_code}")
-                
+                                
                 if response.status_code != 200:
                     # Se falhou, tenta usar cache antigo como fallback
                     if cache_file.exists():
-                        print(f"[DEBUG] ⚠️ Falha no download, usando cache antigo")
                         usar_cache = True
                     else:
                         return None
                 else:
                     # Salva no cache
                     cache_file.write_text(response.text, encoding='utf-8')
-                    print(f"[DEBUG] Cache local atualizado")
                     texto_csv = response.text
             
             # Lê do cache local
@@ -927,16 +911,14 @@ class GerenciadorContas:
             
             # Parse CSV
             linhas = texto_csv.strip().split('\n')
-            print(f"[DEBUG] Total de linhas: {len(linhas)}")
-            
+                        
             if len(linhas) < 2:
                 return None
             
             # Extrai apenas o ano do ticker (ex: "2084")
             ano_match = re.search(r'(\d{4})', ticker)
             ano_busca = ano_match.group(1) if ano_match else None
-            print(f"[DEBUG] Ano extraído: {ano_busca}")
-            
+                        
             # Normaliza o ticker para busca
             def normalizar(texto):
                 texto = texto.upper().strip()
@@ -947,8 +929,7 @@ class GerenciadorContas:
                 return texto
             
             ticker_normalizado = normalizar(ticker)
-            print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
-            
+                    
             # Estrutura do CSV:
             # campos[0] = Tipo Titulo
             # campos[1] = Data Vencimento (DD/MM/YYYY)
@@ -986,8 +967,7 @@ class GerenciadorContas:
                         'ano': ano_titulo
                     }
             
-            print(f"[DEBUG] Títulos únicos processados: {len(ultimas_cotacoes)}")
-            
+                        
             # Busca na última cotação de cada título
             for chave, dados in ultimas_cotacoes.items():
                 tipo_titulo = dados['tipo']
@@ -1017,17 +997,13 @@ class GerenciadorContas:
                     if match_encontrado:
                         try:
                             preco = float(pu_venda.replace(',', '.'))
-                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError as e:
-                            print(f"[DEBUG] Erro ao converter preço '{pu_venda}': {e}")
                             continue
-            
-            print(f"[DEBUG] ❌ Nenhum título encontrado para: {ticker}")
+                   
             return None
         
         except Exception as e:
-            print(f"[DEBUG] ❌ ERRO: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -1249,8 +1225,6 @@ class GerenciadorContas:
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
                 preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)
 
-                print(f"[DEBUG] Calculando posição de {ticker} ({tipo_ativo})")
-
                 # Obtém preço atual conforme o tipo de ativo
                 preco_atual_brl = None
                 
@@ -1258,21 +1232,16 @@ class GerenciadorContas:
                     # Usa o método específico do Tesouro (não normaliza ticker)
                     preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                     if preco_atual_brl is None:
-                        print(f"[DEBUG] ⚠️ Cotação não disponível para {ticker}, usando preço médio")
                         preco_atual_brl = preco_medio_brl
                     else:
-                        print(f"[DEBUG] ✅ Preço do Tesouro: R$ {preco_atual_brl:.2f}")
-                
+                                        
                 elif tipo_ativo == "Cripto":
                     # Usa CoinGecko (já retorna em BRL)
                     preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                     if preco_atual_brl is None:
-                        print(f"[DEBUG] ⚠️ Cotação cripto indisponível para {ticker}, usando preço médio")
-                        preco_atual_brl = preco_medio_brl
+                       preco_atual_brl = preco_medio_brl
+                    
                     else:
-                        print(f"[DEBUG] ✅ Preço cripto: R$ {preco_atual_brl:.8f}")
-                
-                else:
                     # Ações BR, FII, Ações EUA - usa yfinance
                     symbol = self._normalizar_ticker(ticker, tipo_ativo)
                     preco_atual_raw = self._obter_preco_atual_seguro(symbol)
@@ -1283,11 +1252,10 @@ class GerenciadorContas:
                     if tipo_ativo == "Ação EUA" and preco_atual_brl > 0:
                         fx = self._obter_fx_usd_brl()
                         preco_atual_brl = float(preco_atual_raw) * float(fx)
-                        print(f"[DEBUG] Ação EUA: ${preco_atual_raw:.2f} x {fx:.2f} = R$ {preco_atual_brl:.2f}")
+                        
                     
                     # Se não conseguiu obter preço, usa o preço médio
                     if preco_atual_brl == 0.0:
-                        print(f"[DEBUG] ⚠️ Cotação indisponível para {ticker}, usando preço médio")
                         preco_atual_brl = preco_medio_brl
 
                 # Cálculos em BRL
@@ -1311,7 +1279,6 @@ class GerenciadorContas:
 
             except Exception as e:
                 # Ignora ativo problemático e continua
-                print(f"[DEBUG] ❌ Erro ao processar {ticker}: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
