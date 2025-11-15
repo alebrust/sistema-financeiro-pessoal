@@ -876,82 +876,108 @@ class GerenciadorContas:
             if len(linhas) < 2:
                 return None
             
-            # Normaliza o ticker para busca
-            def normalizar(texto):
-                texto = texto.upper().strip()
-                texto = re.sub(r'\s+', ' ', texto)
-                texto = texto.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
-                texto = texto.replace('Ó', 'O').replace('Ú', 'U').replace('Ã', 'A')
-                texto = texto.replace('+', '')  # Remove + para melhorar matching
-                return texto
-            
-            ticker_normalizado = normalizar(ticker)
-            print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
+            # Mostra o cabeçalho para entender a estrutura
+            print(f"[DEBUG] Cabeçalho: {linhas[0]}")
             
             # Extrai apenas o ano do ticker (ex: "2065")
             ano_match = re.search(r'(\d{4})', ticker)
             ano_busca = ano_match.group(1) if ano_match else None
             print(f"[DEBUG] Ano extraído: {ano_busca}")
             
-            titulos_encontrados = []
+            # Normaliza o ticker para busca
+            def normalizar(texto):
+                texto = texto.upper().strip()
+                texto = re.sub(r'\s+', ' ', texto)
+                texto = texto.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+                texto = texto.replace('Ó', 'O').replace('Ú', 'U').replace('Ã', 'A')
+                texto = texto.replace('+', '')
+                return texto
             
-            for linha in linhas[1:]:  # Pula cabeçalho
+            ticker_normalizado = normalizar(ticker)
+            print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
+            
+            # Dicionário para armazenar apenas a última ocorrência de cada título
+            ultimas_cotacoes = {}
+            titulos_2065 = []
+            
+            for i, linha in enumerate(linhas[1:], start=1):  # Pula cabeçalho
                 campos = linha.split(';')
-                if len(campos) < 7:
+                if len(campos) < 8:
                     continue
                 
+                data_base = campos[0].strip()
                 tipo_titulo = campos[1].strip()
                 vencimento = campos[2].strip()
                 pu_venda = campos[6].strip()
                 
-                # Monta o nome do título
-                nome_titulo = f"{tipo_titulo} {vencimento[:4]}"
-                nome_titulo_normalizado = normalizar(nome_titulo)
+                # Mostra títulos com ano 2065 (para debug)
+                ano_titulo = vencimento[:4] if len(vencimento) >= 4 else None
+                if ano_titulo == "2065":
+                    titulos_2065.append(f"{tipo_titulo} {vencimento[:4]}")
                 
-                # Verifica se é o título procurado
+                # Armazena apenas a última cotação de cada título (última linha = mais recente)
+                chave_titulo = f"{tipo_titulo}_{vencimento[:10]}"
+                ultimas_cotacoes[chave_titulo] = {
+                    'data': data_base,
+                    'tipo': tipo_titulo,
+                    'vencimento': vencimento,
+                    'pu_venda': pu_venda
+                }
+            
+            # Mostra títulos únicos de 2065 encontrados
+            titulos_2065_unicos = list(set(titulos_2065))
+            print(f"[DEBUG] Títulos de 2065 disponíveis: {titulos_2065_unicos}")
+            
+            # Busca na última cotação de cada título
+            for chave, dados in ultimas_cotacoes.items():
+                tipo_titulo = dados['tipo']
+                vencimento = dados['vencimento']
+                pu_venda = dados['pu_venda']
                 ano_titulo = vencimento[:4] if len(vencimento) >= 4 else None
                 
-                # Busca por ano E tipo
+                # Monta o nome do título
+                nome_titulo = f"{tipo_titulo} {ano_titulo}"
+                nome_titulo_normalizado = normalizar(nome_titulo)
+                
+                # Verifica se é o ano procurado
                 if ano_busca and ano_titulo == ano_busca:
+                    # Busca flexível por palavras-chave
+                    palavras_ticker = set(ticker_normalizado.split())
+                    palavras_titulo = set(nome_titulo_normalizado.split())
+                    
+                    # Se "RENDA" está no ticker, procura por "RENDA" no título
                     if "RENDA" in ticker_normalizado and "RENDA" in nome_titulo_normalizado:
-                        titulos_encontrados.append((nome_titulo, pu_venda))
-                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
                         try:
                             preco = float(pu_venda.replace(',', '.'))
                             print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
-                        except ValueError:
+                        except ValueError as e:
+                            print(f"[DEBUG] Erro ao converter preço: {e}")
                             continue
+                    # Outras buscas (SELIC, IPCA, etc.)
                     elif "SELIC" in ticker_normalizado and "SELIC" in nome_titulo_normalizado:
-                        titulos_encontrados.append((nome_titulo, pu_venda))
-                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
                         try:
                             preco = float(pu_venda.replace(',', '.'))
-                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError:
                             continue
                     elif "IPCA" in ticker_normalizado and "IPCA" in nome_titulo_normalizado:
-                        titulos_encontrados.append((nome_titulo, pu_venda))
-                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
                         try:
                             preco = float(pu_venda.replace(',', '.'))
-                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError:
                             continue
                     elif "PREFIXADO" in ticker_normalizado and "PREFIXADO" in nome_titulo_normalizado:
-                        titulos_encontrados.append((nome_titulo, pu_venda))
-                        print(f"[DEBUG] Título encontrado: {nome_titulo} | PU: {pu_venda}")
+                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
                         try:
                             preco = float(pu_venda.replace(',', '.'))
-                            print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError:
                             continue
             
             print(f"[DEBUG] ❌ Nenhum título encontrado para: {ticker}")
-            print(f"[DEBUG] Títulos disponíveis encontrados: {titulos_encontrados}")
             return None
         
         except Exception as e:
