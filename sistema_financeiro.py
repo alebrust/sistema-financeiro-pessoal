@@ -852,40 +852,70 @@ class GerenciadorContas:
     def _obter_preco_tesouro(self, ticker: str) -> Optional[float]:
         """
         Obtém o preço unitário de um título do Tesouro Direto via API oficial.
-        Ticker deve ser no formato: "Tesouro Selic 2029", "Tesouro IPCA+ 2035", "Tesouro RendA+ 2065", etc.
+        Usa cache local para evitar downloads repetidos.
+        Ticker deve ser no formato: "Tesouro Selic 2029", "Tesouro IPCA+ 2035", "Tesouro RendA+ 2084", etc.
         """
         try:
             import requests
             import re
+            from pathlib import Path
             
             print(f"[DEBUG] Buscando cotação para: {ticker}")
             
-            # API oficial do Tesouro Nacional
-            url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
+            # Configuração do cache local
+            cache_dir = Path("cache_tesouro")
+            cache_dir.mkdir(exist_ok=True)
+            cache_file = cache_dir / "precos_tesouro.csv"
+            cache_ttl_horas = 4  # Atualiza a cada 4 horas
             
-            response = requests.get(url, timeout=10)
-            print(f"[DEBUG] Status da API: {response.status_code}")
+            # Verifica se o cache existe e está válido
+            usar_cache = False
+            if cache_file.exists():
+                import time
+                idade_cache = time.time() - cache_file.stat().st_mtime
+                idade_cache_horas = idade_cache / 3600
+                print(f"[DEBUG] Cache local encontrado (idade: {idade_cache_horas:.1f}h)")
+                
+                if idade_cache_horas < cache_ttl_horas:
+                    usar_cache = True
+                    print(f"[DEBUG] Usando cache local (válido por mais {cache_ttl_horas - idade_cache_horas:.1f}h)")
             
-            if response.status_code != 200:
-                return None
+            # Download do CSV (se necessário)
+            if not usar_cache:
+                print(f"[DEBUG] Baixando dados do Tesouro Nacional (pode demorar 15-30s)...")
+                url = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
+                
+                response = requests.get(url, timeout=30)  # Aumentado para 30s
+                print(f"[DEBUG] Status da API: {response.status_code}")
+                
+                if response.status_code != 200:
+                    # Se falhou, tenta usar cache antigo como fallback
+                    if cache_file.exists():
+                        print(f"[DEBUG] ⚠️ Falha no download, usando cache antigo")
+                        usar_cache = True
+                    else:
+                        return None
+                else:
+                    # Salva no cache
+                    cache_file.write_text(response.text, encoding='utf-8')
+                    print(f"[DEBUG] Cache local atualizado")
+                    texto_csv = response.text
+            
+            # Lê do cache local
+            if usar_cache:
+                texto_csv = cache_file.read_text(encoding='utf-8')
             
             # Parse CSV
-            linhas = response.text.strip().split('\n')
-            print(f"[DEBUG] Total de linhas no CSV: {len(linhas)}")
+            linhas = texto_csv.strip().split('\n')
+            print(f"[DEBUG] Total de linhas: {len(linhas)}")
             
             if len(linhas) < 2:
                 return None
             
-            # Mostra 3 exemplos de linhas para debug
-            print(f"[DEBUG] Exemplo linha 1: {linhas[1]}")
-            print(f"[DEBUG] Exemplo linha 2: {linhas[2]}")
-            if len(linhas) > 100:
-                print(f"[DEBUG] Exemplo linha 100: {linhas[100]}")
-            
-            # Extrai apenas o ano do ticker (ex: "2065")
+            # Extrai apenas o ano do ticker (ex: "2084")
             ano_match = re.search(r'(\d{4})', ticker)
             ano_busca = ano_match.group(1) if ano_match else None
-            print(f"[DEBUG] Ano extraído do ticker: {ano_busca}")
+            print(f"[DEBUG] Ano extraído: {ano_busca}")
             
             # Normaliza o ticker para busca
             def normalizar(texto):
@@ -899,50 +929,33 @@ class GerenciadorContas:
             ticker_normalizado = normalizar(ticker)
             print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
             
+            # Estrutura do CSV:
+            # campos[0] = Tipo Titulo
+            # campos[1] = Data Vencimento (DD/MM/YYYY)
+            # campos[2] = Data Base
+            # campos[6] = PU Venda Manha
+            
             # Dicionário para armazenar apenas a última ocorrência de cada título
             ultimas_cotacoes = {}
-            contador_linhas_processadas = 0
-            titulos_vencimento_2065 = []
             
-            for idx, linha in enumerate(linhas[1:], start=1):  # Pula cabeçalho
+            for linha in linhas[1:]:  # Pula cabeçalho
                 campos = linha.split(';')
                 if len(campos) < 8:
                     continue
-                
-                contador_linhas_processadas += 1
                 
                 tipo_titulo = campos[0].strip()
                 data_vencimento = campos[1].strip()
                 data_base = campos[2].strip()
                 pu_venda = campos[6].strip()
                 
-                # Debug: mostra campos da primeira linha
-                if idx == 1:
-                    print(f"[DEBUG] Primeira linha processada:")
-                    print(f"  - Tipo: '{tipo_titulo}'")
-                    print(f"  - Vencimento: '{data_vencimento}'")
-                    print(f"  - Data Base: '{data_base}'")
-                    print(f"  - PU Venda: '{pu_venda}'")
-                
-                # Verifica se a data contém "2065"
-                if "2065" in data_vencimento:
-                    titulos_vencimento_2065.append(f"{tipo_titulo} - Venc: {data_vencimento}")
-                    if len(titulos_vencimento_2065) <= 3:  # Mostra apenas os 3 primeiros
-                        print(f"[DEBUG] Título com 2065 encontrado: {tipo_titulo} | Vencimento: {data_vencimento}")
-                
-                # Extrai ano do vencimento
-                # Tenta diversos formatos: DD/MM/YYYY, YYYY-MM-DD, etc.
+                # Extrai ano do vencimento (formato: DD/MM/YYYY)
                 ano_titulo = None
                 if '/' in data_vencimento:
                     partes = data_vencimento.split('/')
                     if len(partes) == 3 and len(partes[2]) == 4:
                         ano_titulo = partes[2]
-                elif '-' in data_vencimento:
-                    partes = data_vencimento.split('-')
-                    if len(partes) == 3 and len(partes[0]) == 4:
-                        ano_titulo = partes[0]
                 
-                # Armazena apenas a última cotação de cada título
+                # Armazena apenas a última cotação de cada título (última linha = mais recente)
                 if ano_titulo:
                     chave_titulo = f"{tipo_titulo}_{data_vencimento}"
                     ultimas_cotacoes[chave_titulo] = {
@@ -953,9 +966,7 @@ class GerenciadorContas:
                         'ano': ano_titulo
                     }
             
-            print(f"[DEBUG] Total de linhas processadas: {contador_linhas_processadas}")
-            print(f"[DEBUG] Total de títulos únicos: {len(ultimas_cotacoes)}")
-            print(f"[DEBUG] Títulos com vencimento em 2065 encontrados: {len(titulos_vencimento_2065)}")
+            print(f"[DEBUG] Títulos únicos processados: {len(ultimas_cotacoes)}")
             
             # Busca na última cotação de cada título
             for chave, dados in ultimas_cotacoes.items():
@@ -970,34 +981,26 @@ class GerenciadorContas:
                     nome_titulo_normalizado = normalizar(nome_titulo)
                     
                     # Busca flexível por palavras-chave
+                    match_encontrado = False
+                    
                     if "RENDA" in ticker_normalizado and "RENDA" in nome_titulo_normalizado:
+                        match_encontrado = True
+                    elif "SELIC" in ticker_normalizado and "SELIC" in nome_titulo_normalizado:
+                        match_encontrado = True
+                    elif "IPCA" in ticker_normalizado and "IPCA" in nome_titulo_normalizado:
+                        match_encontrado = True
+                    elif "PREFIXADO" in ticker_normalizado and "PREFIXADO" in nome_titulo_normalizado:
+                        match_encontrado = True
+                    elif "EDUCA" in ticker_normalizado and "EDUCA" in nome_titulo_normalizado:
+                        match_encontrado = True
+                    
+                    if match_encontrado:
                         try:
                             preco = float(pu_venda.replace(',', '.'))
                             print(f"[DEBUG] ✅ Retornando preço: R$ {preco:.2f}")
                             return preco
                         except ValueError as e:
                             print(f"[DEBUG] Erro ao converter preço '{pu_venda}': {e}")
-                            continue
-                    elif "SELIC" in ticker_normalizado and "SELIC" in nome_titulo_normalizado:
-                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
-                        try:
-                            preco = float(pu_venda.replace(',', '.'))
-                            return preco
-                        except ValueError:
-                            continue
-                    elif "IPCA" in ticker_normalizado and "IPCA" in nome_titulo_normalizado:
-                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
-                        try:
-                            preco = float(pu_venda.replace(',', '.'))
-                            return preco
-                        except ValueError:
-                            continue
-                    elif "PREFIXADO" in ticker_normalizado and "PREFIXADO" in nome_titulo_normalizado:
-                        print(f"[DEBUG] ✅ Match encontrado: {nome_titulo} | PU: {pu_venda}")
-                        try:
-                            preco = float(pu_venda.replace(',', '.'))
-                            return preco
-                        except ValueError:
                             continue
             
             print(f"[DEBUG] ❌ Nenhum título encontrado para: {ticker}")
