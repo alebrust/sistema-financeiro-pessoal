@@ -876,10 +876,16 @@ class GerenciadorContas:
             if len(linhas) < 2:
                 return None
             
+            # Mostra 3 exemplos de linhas para debug
+            print(f"[DEBUG] Exemplo linha 1: {linhas[1]}")
+            print(f"[DEBUG] Exemplo linha 2: {linhas[2]}")
+            if len(linhas) > 100:
+                print(f"[DEBUG] Exemplo linha 100: {linhas[100]}")
+            
             # Extrai apenas o ano do ticker (ex: "2065")
             ano_match = re.search(r'(\d{4})', ticker)
             ano_busca = ano_match.group(1) if ano_match else None
-            print(f"[DEBUG] Ano extraído: {ano_busca}")
+            print(f"[DEBUG] Ano extraído do ticker: {ano_busca}")
             
             # Normaliza o ticker para busca
             def normalizar(texto):
@@ -893,46 +899,63 @@ class GerenciadorContas:
             ticker_normalizado = normalizar(ticker)
             print(f"[DEBUG] Ticker normalizado: {ticker_normalizado}")
             
-            # Estrutura do CSV:
-            # campos[0] = Tipo Titulo
-            # campos[1] = Data Vencimento
-            # campos[2] = Data Base
-            # campos[6] = PU Venda Manha
-            
             # Dicionário para armazenar apenas a última ocorrência de cada título
             ultimas_cotacoes = {}
-            titulos_ano_busca = []
+            contador_linhas_processadas = 0
+            titulos_vencimento_2065 = []
             
-            for linha in linhas[1:]:  # Pula cabeçalho
+            for idx, linha in enumerate(linhas[1:], start=1):  # Pula cabeçalho
                 campos = linha.split(';')
                 if len(campos) < 8:
                     continue
+                
+                contador_linhas_processadas += 1
                 
                 tipo_titulo = campos[0].strip()
                 data_vencimento = campos[1].strip()
                 data_base = campos[2].strip()
                 pu_venda = campos[6].strip()
                 
-                # Extrai ano do vencimento (formato: DD/MM/YYYY)
-                ano_titulo = data_vencimento[-4:] if len(data_vencimento) >= 4 else None
+                # Debug: mostra campos da primeira linha
+                if idx == 1:
+                    print(f"[DEBUG] Primeira linha processada:")
+                    print(f"  - Tipo: '{tipo_titulo}'")
+                    print(f"  - Vencimento: '{data_vencimento}'")
+                    print(f"  - Data Base: '{data_base}'")
+                    print(f"  - PU Venda: '{pu_venda}'")
                 
-                # Debug: mostra títulos do ano procurado
-                if ano_titulo == ano_busca:
-                    titulos_ano_busca.append(f"{tipo_titulo} {ano_titulo}")
+                # Verifica se a data contém "2065"
+                if "2065" in data_vencimento:
+                    titulos_vencimento_2065.append(f"{tipo_titulo} - Venc: {data_vencimento}")
+                    if len(titulos_vencimento_2065) <= 3:  # Mostra apenas os 3 primeiros
+                        print(f"[DEBUG] Título com 2065 encontrado: {tipo_titulo} | Vencimento: {data_vencimento}")
                 
-                # Armazena apenas a última cotação de cada título (última linha = mais recente)
-                chave_titulo = f"{tipo_titulo}_{data_vencimento}"
-                ultimas_cotacoes[chave_titulo] = {
-                    'data': data_base,
-                    'tipo': tipo_titulo,
-                    'vencimento': data_vencimento,
-                    'pu_venda': pu_venda,
-                    'ano': ano_titulo
-                }
+                # Extrai ano do vencimento
+                # Tenta diversos formatos: DD/MM/YYYY, YYYY-MM-DD, etc.
+                ano_titulo = None
+                if '/' in data_vencimento:
+                    partes = data_vencimento.split('/')
+                    if len(partes) == 3 and len(partes[2]) == 4:
+                        ano_titulo = partes[2]
+                elif '-' in data_vencimento:
+                    partes = data_vencimento.split('-')
+                    if len(partes) == 3 and len(partes[0]) == 4:
+                        ano_titulo = partes[0]
+                
+                # Armazena apenas a última cotação de cada título
+                if ano_titulo:
+                    chave_titulo = f"{tipo_titulo}_{data_vencimento}"
+                    ultimas_cotacoes[chave_titulo] = {
+                        'data': data_base,
+                        'tipo': tipo_titulo,
+                        'vencimento': data_vencimento,
+                        'pu_venda': pu_venda,
+                        'ano': ano_titulo
+                    }
             
-            # Mostra títulos únicos do ano procurado
-            titulos_unicos = list(set(titulos_ano_busca))[:5]  # Limita a 5 para não poluir
-            print(f"[DEBUG] Títulos de {ano_busca} disponíveis (amostra): {titulos_unicos}")
+            print(f"[DEBUG] Total de linhas processadas: {contador_linhas_processadas}")
+            print(f"[DEBUG] Total de títulos únicos: {len(ultimas_cotacoes)}")
+            print(f"[DEBUG] Títulos com vencimento em 2065 encontrados: {len(titulos_vencimento_2065)}")
             
             # Busca na última cotação de cada título
             for chave, dados in ultimas_cotacoes.items():
