@@ -1,663 +1,985 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime, timedelta
+from datetime import datetime, date
 from collections import defaultdict
+
 from sistema_financeiro import (
     GerenciadorContas,
     ContaCorrente,
     ContaInvestimento,
-    CartaoCredito,
     Ativo,
+    CartaoCredito,
 )
 
-# --- Configuração da Página ---
-st.set_page_config(
-    page_title="Super Carteira",
-    page_icon="💰",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
-# --- Funções de Formatação e Estilo ---
 def formatar_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def _cor_pl(val):
-    if isinstance(val, (int, float)):
-        color = "green" if val >= 0 else "red"
-        return f"color: {color}"
-    return ""
 
-# --- Inicialização do Gerenciador ---
-def inicializar_gerenciador():
-    if "gerenciador" not in st.session_state:
-        st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
-        st.session_state.gerenciador.carregar_dados()
-    if "cache_posicoes" not in st.session_state:
-        st.session_state.cache_posicoes = {}
-    if "cache_faturas" not in st.session_state:
-        st.session_state.cache_faturas = {}
-    if "selected_account_id" not in st.session_state:
-        st.session_state.selected_account_id = None
-    if "selected_card_id" not in st.session_state:
-        st.session_state.selected_card_id = None
-    if "current_month_year" not in st.session_state:
-        st.session_state.current_month_year = (date.today().year, date.today().month)
+st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
 
-# --- Funções de Cache para Streamlit ---
-@st.cache_data(ttl=3600)
-def obter_posicao_conta_investimento_cached(_gerenciador_instance, conta_id: str):
-    """Cache de 1 hora para cálculo de posição"""
-    return _gerenciador_instance.calcular_posicao_conta_investimento(conta_id)
-    
-@st.cache_data(ttl=3600) # Cache por 1 hora
-def obter_faturas_cartao_cached(gerenciador_instance, id_cartao):
-    # Este método não existe no gerenciador, é um placeholder para cachear faturas se implementado
-    # Por enquanto, retorna uma lista vazia ou um dicionário de faturas
-    return [] # ou gerenciador_instance.obter_faturas_cartao(id_cartao) se existir
+if "gerenciador" not in st.session_state:
+    st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
 
-# --- Funções de Ação Rápida ---
-def criar_acao_rapida(label, icon, key, callback, *args, **kwargs):
-    if st.button(label, key=key, use_container_width=True):
-        callback(*args, **kwargs)
-        st.session_state.gerenciador.salvar_dados()
-        st.session_state.cache_posicoes = {} # Limpa cache de posições
-        st.session_state.cache_faturas = {} # Limpa cache de faturas
-        # st.rerun() # Removido conforme otimização, deixa o Streamlit re-renderizar naturalmente
+for key, default in [
+    ("transacao_para_excluir", None),
+    ("conta_para_excluir", None),
+    ("compra_para_excluir", None),
+    ("fatura_para_pagar", None),
+    ("cartao_para_excluir", None),
+    ("categoria_para_excluir", None),
+   ]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-# --- Main Application Logic ---
-def main():
-    inicializar_gerenciador()
-    gerenciador = st.session_state.gerenciador
+st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
 
-    # --- Sidebar ---
-    st.sidebar.title("Minhas Contas")
-    contas_disponiveis = {c.id_conta: c.nome for c in gerenciador.contas}
-    
-    if contas_disponiveis:
-        selected_account_name = st.sidebar.selectbox(
-            "Selecione uma conta:",
-            options=list(contas_disponiveis.values()),
-            key="sidebar_account_select"
-        )
-        st.session_state.selected_account_id = next(
-            (id for id, name in contas_disponiveis.items() if name == selected_account_name),
-            None
-        )
-    else:
-        st.sidebar.info("Nenhuma conta cadastrada.")
-        st.session_state.selected_account_id = None
+tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
+    ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
+)
 
-    saldo_total = sum(
-        c.saldo
-        if isinstance(c, ContaCorrente)
-        else (obter_posicao_conta_investimento_cached(gerenciador, c.id_conta)["patrimonio_atualizado"] if c.id_conta in contas_disponiveis else c.saldo)
-        for c in gerenciador.contas
-    )
-    st.sidebar.metric("Saldo Total Consolidado", formatar_moeda(saldo_total))
+# --- DASHBOARD ---
+with tab_dashboard:
+    col1, col2 = st.columns([1, 1])
 
-    # --- Tabs ---
-    tab_dashboard, tab_historico, tab_contas, tab_cartoes, tab_config = st.tabs(
-        ["Dashboard", "Histórico", "Contas", "Cartões", "Configurações"]
-    )
+    with col2:
+        st.header("Ações Rápidas")
 
-    # --- Tab Dashboard ---
-    with tab_dashboard:
-        st.header("Dashboard Financeiro")
-
-        if st.session_state.selected_account_id:
-            conta_selecionada = gerenciador.buscar_conta_por_id(st.session_state.selected_account_id)
-            if conta_selecionada:
-                st.subheader(f"Visão Geral: {conta_selecionada.nome}")
-
-                if isinstance(conta_selecionada, ContaCorrente):
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Saldo Atual", formatar_moeda(conta_selecionada.saldo))
-                    col2.metric("Limite Cheque Especial", formatar_moeda(conta_selecionada.limite_cheque_especial))
-                    col3.metric("Saldo Disponível", formatar_moeda(conta_selecionada.saldo + conta_selecionada.limite_cheque_especial))
-
-                    st.subheader("Ações Rápidas")
-                    col_compra, col_venda, col_transf = st.columns(3)
-                    with col_compra:
-                        with st.expander("Registrar Receita"):
-                            with st.form("form_receita_cc"):
-                                descricao = st.text_input("Descrição da Receita", key="desc_rec_cc")
-                                valor = st.number_input("Valor", min_value=0.01, format="%.2f", key="val_rec_cc")
-                                data_transacao = st.date_input("Data", value="today", key="data_rec_cc")
-                                categoria = st.selectbox("Categoria", gerenciador.categorias, key="cat_rec_cc")
-                                observacao = st.text_area("Observação (opcional)", key="obs_rec_cc")
-                                if st.form_submit_button("Registrar Receita"):
-                                    if gerenciador.registrar_transacao(
-                                        conta_selecionada.id_conta, descricao, valor, "Receita", data_transacao, categoria, observacao
-                                    ):
-                                        st.success("Receita registrada com sucesso!")
-                                        gerenciador.salvar_dados()
-                                        st.session_state.cache_posicoes = {}
-                                        # st.rerun()
-                                    else:
-                                        st.error("Erro ao registrar receita.")
-                    with col_venda:
-                        with st.expander("Registrar Despesa"):
-                            with st.form("form_despesa_cc"):
-                                descricao = st.text_input("Descrição da Despesa", key="desc_desp_cc")
-                                valor = st.number_input("Valor", min_value=0.01, format="%.2f", key="val_desp_cc")
-                                data_transacao = st.date_input("Data", value="today", key="data_desp_cc")
-                                categoria = st.selectbox("Categoria", gerenciador.categorias, key="cat_desp_cc")
-                                observacao = st.text_area("Observação (opcional)", key="obs_desp_cc")
-                                if st.form_submit_button("Registrar Despesa"):
-                                    if gerenciador.registrar_transacao(
-                                        conta_selecionada.id_conta, descricao, valor, "Despesa", data_transacao, categoria, observacao
-                                    ):
-                                        st.success("Despesa registrada com sucesso!")
-                                        gerenciador.salvar_dados()
-                                        st.session_state.cache_posicoes = {}
-                                        # st.rerun()
-                                    else:
-                                        st.error("Erro ao registrar despesa. Verifique o saldo.")
-                    with col_transf:
-                        with st.expander("Transferir entre Contas"):
-                            with st.form("form_transferencia_cc"):
-                                contas_destino = {c.id_conta: c.nome for c in gerenciador.contas if c.id_conta != conta_selecionada.id_conta}
-                                if contas_destino:
-                                    selected_destino_name = st.selectbox("Conta Destino", options=list(contas_destino.values()), key="transf_destino_cc")
-                                    id_destino = next((id for id, name in contas_destino.items() if name == selected_destino_name), None)
-                                    valor = st.number_input("Valor da Transferência", min_value=0.01, format="%.2f", key="val_transf_cc")
-                                    if st.form_submit_button("Transferir"):
-                                        if id_destino and gerenciador.realizar_transferencia(conta_selecionada.id_conta, id_destino, valor):
-                                            st.success("Transferência realizada com sucesso!")
-                                            gerenciador.salvar_dados()
-                                            st.session_state.cache_posicoes = {}
-                                            # st.rerun()
-                                        else:
-                                            st.error("Erro ao realizar transferência. Verifique o saldo ou conta destino.")
-                                else:
-                                    st.warning("Nenhuma outra conta disponível para transferência.")
-
-                elif isinstance(conta_selecionada, ContaInvestimento):
-                    posicao = obter_posicao_conta_investimento_cached(gerenciador, conta_selecionada.id_conta)
-                    
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Saldo em Caixa", formatar_moeda(posicao["saldo_caixa"]))
-                    col2.metric("Valor Total em Ativos", formatar_moeda(posicao["total_valor_atual_ativos"]))
-                    col3.metric("Patrimônio Atualizado", formatar_moeda(posicao["patrimonio_atualizado"]))
-
-                    st.subheader("Ações Rápidas")
-                    col_compra, col_venda, col_atualizar = st.columns(3)
-                    with col_compra:
-                        with st.expander("Comprar Ativo"):
-                            with st.form("form_comprar_ativo"):
-                                ticker = st.text_input("Ticker do Ativo", key="ticker_compra")
-                                tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "Ação EUA", "FII", "Cripto", "Tesouro Direto", "Outro"], key="tipo_compra")
-                                quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f", key="qtd_compra")
-                                preco_unitario = st.number_input("Preço Unitário", min_value=0.01, format="%.8f", key="preco_compra")
-                                data_compra = st.date_input("Data da Compra", value="today", key="data_compra")
-                                if st.form_submit_button("Comprar"):
-                                    if gerenciador.comprar_ativo(
-                                        conta_selecionada.id_conta, ticker, quantidade, preco_unitario, tipo_ativo, data_compra
-                                    ):
-                                        st.success(f"Compra de {ticker} registrada com sucesso!")
-                                        gerenciador.salvar_dados()
-                                        st.session_state.cache_posicoes = {}
-                                        # st.rerun()
-                                    else:
-                                        st.error("Erro ao registrar compra. Verifique o saldo em caixa.")
-                    with col_venda:
-                        with st.expander("Vender Ativo"):
-                            with st.form("form_vender_ativo"):
-                                ativos_disponiveis = {a.ticker: a for a in conta_selecionada.ativos}
-                                if ativos_disponiveis:
-                                    selected_ticker = st.selectbox("Ativo para Vender", options=list(ativos_disponiveis.keys()), key="ticker_venda")
-                                    ativo_venda = ativos_disponiveis[selected_ticker]
-                                    
-                                    st.info(f"Quantidade disponível: {ativo_venda.quantidade:.6f}")
-                                    quantidade = st.number_input("Quantidade", min_value=0.000001, max_value=ativo_venda.quantidade, format="%.6f", key="qtd_venda")
-                                    preco_venda = st.number_input("Preço de Venda", min_value=0.01, format="%.8f", key="preco_venda")
-                                    data_venda = st.date_input("Data da Venda", value="today", key="data_venda").isoformat()
-                                    observacao = st.text_area("Observação (opcional)", key="obs_venda")
-                                    
-                                    if st.form_submit_button("Vender"):
-                                        sucesso, mensagem = gerenciador.vender_ativo(
-                                            conta_selecionada.id_conta, selected_ticker, quantidade, preco_venda, data_venda, observacao
-                                        )
-                                        if sucesso:
-                                            st.success(mensagem)
-                                            gerenciador.salvar_dados()
-                                            st.session_state.cache_posicoes = {}
-                                            # st.rerun()
-                                        else:
-                                            st.error(mensagem)
-                                else:
-                                    st.warning("Nenhum ativo disponível para venda.")
-                    with col_atualizar:
-                        if st.button("Atualizar Cotações", key="btn_atualizar_cotacoes", use_container_width=True):
-                            st.session_state.cache_posicoes = {} # Força recálculo
-                            # st.rerun() # Removido conforme otimização
-
-                st.subheader("Últimas Transações")
-                transacoes_conta = [t for t in gerenciador.transacoes if t.id_conta == conta_selecionada.id_conta]
-                if transacoes_conta:
-                    df_transacoes = pd.DataFrame([t.para_dict() for t in transacoes_conta])
-                    df_transacoes["data"] = pd.to_datetime(df_transacoes["data"]).dt.date
-                    df_transacoes = df_transacoes.sort_values(by="data", ascending=False).head(10)
-                    st.dataframe(df_transacoes.drop(columns=["id_transacao", "id_conta"]), width='stretch')
-                else:
-                    st.info("Nenhuma transação recente nesta conta.")
+        # --------------------------
+        # Comprar Ativo (por ID, exibindo apenas nome)
+        # --------------------------
+        with st.expander("📈 Comprar Ativo"):
+            contas_investimento = [
+                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)
+            ]
+            if not contas_investimento:
+                st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
             else:
-                st.warning("Conta selecionada não encontrada.")
-        else:
-            st.info("Selecione uma conta na barra lateral para ver o dashboard.")
-
-    # --- Tab Histórico ---
-    with tab_historico:
-        st.header("Histórico de Transações")
-        
-        if gerenciador.transacoes:
-            df_transacoes = pd.DataFrame([t.para_dict() for t in gerenciador.transacoes])
-            df_transacoes["data"] = pd.to_datetime(df_transacoes["data"]).dt.date
-            df_transacoes["valor"] = df_transacoes["valor"].apply(formatar_moeda)
-            
-            contas_map = {c.id_conta: c.nome for c in gerenciador.contas}
-            df_transacoes["conta"] = df_transacoes["id_conta"].map(contas_map)
-            
-            df_transacoes_display = df_transacoes[[
-                "data", "conta", "descricao", "tipo", "categoria", "valor", "observacao", "id_transacao"
-            ]].sort_values(by="data", ascending=False)
-
-            st.dataframe(
-                df_transacoes_display,
-                hide_index=True,
-                column_config={
-                    "id_transacao": st.column_config.Column(
-                        "ID",
-                        help="ID único da transação",
-                        width="small"
+                # Mapa por ID, exibindo apenas nome
+                mapa_ci = {c.id_conta: c for c in contas_investimento}
+                ids_ci = list(mapa_ci.keys())
+                with st.form("buy_asset_form", clear_on_submit=True):
+                    st.write("Registrar Compra de Ativo")
+                    conta_destino_id = st.selectbox(
+                        "Comprar na corretora:",
+                        options=ids_ci,
+                        format_func=lambda cid: mapa_ci[cid].nome,
+                        key="buy_asset_conta_destino_id"
                     )
-                },
-                width='stretch'
-            )
+                    ticker_input = st.text_input("Ticker do Ativo (ex: PETR4, AAPL, Tesouro Selic 2029)")
+                    tipo_ativo = st.selectbox("Tipo de Ativo", ["Ação BR", "FII", "Ação EUA", "Cripto", "Tesouro Direto", "Outro"])
+                                        
+                    # Instruções de formato do ticker por tipo
+                    if tipo_ativo == "Tesouro Direto":
+                        st.info("💡 **Formato:** Digite o nome completo do título. Exemplos: 'Tesouro Selic 2029', 'Tesouro IPCA+ 2035', 'Tesouro Prefixado 2027'")
+                    elif tipo_ativo == "Cripto":
+                        st.info("💡 **Formato:** Use o símbolo da criptomoeda. Exemplos: 'BTC', 'ETH', 'PEPE', 'DOGE'")
+                    elif tipo_ativo == "Ação BR" or tipo_ativo == "FII":
+                        st.info("💡 **Formato:** Use o código da B3. Exemplos: 'PETR4', 'VALE3', 'MXRF11'")
+                    elif tipo_ativo == "Ação EUA":
+                        st.info("💡 **Formato:** Use o ticker da NYSE/NASDAQ. Exemplos: 'AAPL', 'MSFT', 'GOOGL'")
 
-            st.subheader("Remover Transação")
-            transacoes_para_remover = {t.id_transacao: f"{t.data.isoformat()} - {t.descricao} ({t.valor})" for t in gerenciador.transacoes}
-            if transacoes_para_remover:
-                id_transacao_selecionada = st.selectbox(
-                    "Selecione a transação para remover:",
-                    options=list(transacoes_para_remover.keys()),
-                    format_func=lambda x: transacoes_para_remover[x],
-                    key="select_remover_transacao"
-                )
-                if st.button("Confirmar Remoção", key="btn_remover_transacao"):
-                    if gerenciador.remover_transacao(id_transacao_selecionada):
-                        st.success("Transação removida com sucesso!")
-                        gerenciador.salvar_dados()
-                        st.session_state.cache_posicoes = {}
-                        st.session_state.cache_faturas = {}
-                        st.rerun() # Rerun aqui é necessário para atualizar o dataframe exibido e o selectbox
+                                        
+                    # Normaliza ticker conforme o tipo
+                    if tipo_ativo == "Tesouro Direto":
+                        ticker = ticker_input.strip()  # Mantém maiúsculas/minúsculas
                     else:
-                        st.error("Erro ao remover transação.")
-            else:
-                st.info("Nenhuma transação para remover.")
-        else:
-            st.info("Nenhuma transação registrada ainda.")
-
-    # --- Tab Contas ---
-    with tab_contas:
-        st.header("Gerenciar Contas")
-
-        st.subheader("Contas Cadastradas")
-        if gerenciador.contas:
-            dados_contas = []
-            for c in gerenciador.contas:
-                if isinstance(c, ContaCorrente):
-                    dados_contas.append({
-                        "ID": c.id_conta,
-                        "Nome": c.nome,
-                        "Tipo": "Corrente",
-                        "Saldo": formatar_moeda(c.saldo),
-                        "Limite Cheque Especial": formatar_moeda(c.limite_cheque_especial),
-                        "Patrimônio Atualizado": formatar_moeda(c.saldo)
-                    })
-                elif isinstance(c, ContaInvestimento):
-                    posicao = obter_posicao_conta_investimento_cached(gerenciador, c.id_conta)
-                    dados_contas.append({
-                        "ID": c.id_conta,
-                        "Nome": c.nome,
-                        "Tipo": "Investimento",
-                        "Saldo em Caixa": formatar_moeda(posicao["saldo_caixa"]),
-                        "Valor Total em Ativos": formatar_moeda(posicao["total_valor_atual_ativos"]),
-                        "Patrimônio Atualizado": formatar_moeda(posicao["patrimonio_atualizado"])
-                    })
-            df_contas = pd.DataFrame(dados_contas)
-            st.dataframe(df_contas, width='stretch')
-
-            st.subheader("Detalhes e Posição de Investimento")
-            contas_investimento = {c.id_conta: c.nome for c in gerenciador.contas if isinstance(c, ContaInvestimento)}
-            if contas_investimento:
-                selected_inv_account_name = st.selectbox(
-                    "Selecione uma conta de investimento:",
-                    options=list(contas_investimento.values()),
-                    key="select_inv_account"
-                )
-                selected_inv_account_id = next(
-                    (id for id, name in contas_investimento.items() if name == selected_inv_account_name),
-                    None
-                )
-                if selected_inv_account_id:
-                    conta_inv = gerenciador.buscar_conta_por_id(selected_inv_account_id)
-                    if conta_inv and isinstance(conta_inv, ContaInvestimento):
-                        posicao = obter_posicao_conta_investimento_cached(gerenciador, conta_inv.id_conta)
+                        ticker = ticker_input.upper()  # Converte para maiúsculas
                         
-                        st.markdown(f"### Posição Atual de {conta_inv.nome}")
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Saldo em Caixa", formatar_moeda(posicao["saldo_caixa"]))
-                        col2.metric("Valor Total em Ativos", formatar_moeda(posicao["total_valor_atual_ativos"]))
-                        col3.metric("Patrimônio Atualizado", formatar_moeda(posicao["patrimonio_atualizado"]))
-
-                        if posicao["ativos"]:
-                            df_ativos = pd.DataFrame(posicao["ativos"])
-                            df_ativos["preco_medio"] = df_ativos["preco_medio"].apply(formatar_moeda)
-                            df_ativos["preco_atual"] = df_ativos["preco_atual"].apply(formatar_moeda)
-                            df_ativos["valor_atual"] = df_ativos["valor_atual"].apply(formatar_moeda)
-                            df_ativos["pl"] = df_ativos["pl"].apply(formatar_moeda)
-                            df_ativos["pl_pct"] = df_ativos["pl_pct"].apply(lambda x: f"{x:+.2f}%")
-
-                            st.dataframe(
-                                df_ativos.style.map(_cor_pl, subset=["pl", "pl_pct"]),
-                                hide_index=True,
-                                width='stretch'
+                    col_qnt, col_preco = st.columns(2)
+                    with col_qnt:
+                        quantidade = st.number_input("Quantidade", min_value=0.000001, format="%.6f")
+                    with col_preco:
+                        preco_unitario = st.number_input("Preço por Unidade (R$)", min_value=0.00000001, format="%.8f")
+                    data_compra = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
+                    if st.form_submit_button("Confirmar Compra"):
+                        if not all([ticker, quantidade > 0, preco_unitario > 0]):
+                            st.error("Preencha todos os detalhes da compra do ativo.")
+                        else:
+                            sucesso = st.session_state.gerenciador.comprar_ativo(
+                                id_conta_destino=conta_destino_id,
+                                ticker=ticker,
+                                quantidade=quantidade,
+                                preco_unitario=preco_unitario,
+                                tipo_ativo=tipo_ativo,
+                                data_compra=data_compra,
                             )
-                        else:
-                            st.info("Nenhum ativo nesta conta de investimento.")
+                            if sucesso:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.success(f"Compra de {ticker} registrada!")
+                                st.rerun()
+                            else:
+                                st.error("Falha na compra. Verifique o saldo em caixa da corretora.")
+
+
+        # Vender Ativo
+        with st.expander("📊 Vender Ativo", expanded=False):
+            contas_inv_venda = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
+            
+            if not contas_inv_venda:
+                st.info("Crie uma Conta de Investimento para vender ativos.")
             else:
-                st.info("Nenhuma conta de investimento cadastrada.")
-        else:
-            st.info("Nenhuma conta cadastrada ainda.")
-
-        st.subheader("Adicionar Nova Conta")
-        tipo_nova_conta = st.radio("Tipo de Conta", ["Corrente", "Investimento"], key="tipo_nova_conta")
-        with st.form("form_nova_conta"):
-            nome_nova_conta = st.text_input("Nome da Conta", key="nome_nova_conta")
-            logo_url_nova_conta = st.text_input("URL do Logo (opcional)", key="logo_nova_conta")
-            if tipo_nova_conta == "Corrente":
-                saldo_inicial = st.number_input("Saldo Inicial", value=0.0, format="%.2f", key="saldo_inicial_cc")
-                limite_cheque_especial = st.number_input("Limite Cheque Especial", value=0.0, format="%.2f", key="limite_cc")
-            else: # Investimento
-                saldo_inicial = st.number_input("Saldo Inicial em Caixa", value=0.0, format="%.2f", key="saldo_inicial_inv")
-            
-            if st.form_submit_button("Adicionar Conta"):
-                if nome_nova_conta:
-                    if tipo_nova_conta == "Corrente":
-                        nova_conta = ContaCorrente(nome_nova_conta, saldo_inicial, limite_cheque_especial, logo_url_nova_conta)
-                    else:
-                        nova_conta = ContaInvestimento(nome_nova_conta, logo_url_nova_conta, saldo_inicial)
-                    gerenciador.adicionar_conta(nova_conta)
-                    gerenciador.salvar_dados()
-                    st.success(f"Conta '{nome_nova_conta}' adicionada com sucesso!")
-                    st.session_state.cache_posicoes = {}
-                    st.rerun() # Rerun aqui é necessário para atualizar a sidebar e os selectboxes
+                conta_venda_sel = st.selectbox("Conta de Investimento", contas_inv_venda, format_func=lambda x: x.nome, key="conta_venda_sel")
+                
+                # Lista os ativos disponíveis para venda
+                ativos_disponiveis = conta_venda_sel.ativos if conta_venda_sel.ativos else []
+                
+                if not ativos_disponiveis:
+                    st.info("Não há ativos nesta conta para vender.")
                 else:
-                    st.error("O nome da conta não pode ser vazio.")
-
-        st.subheader("Remover Conta")
-        if contas_disponiveis:
-            id_conta_remover = st.selectbox(
-                "Selecione a conta para remover:",
-                options=list(contas_disponiveis.keys()),
-                format_func=lambda x: contas_disponiveis[x],
-                key="select_remover_conta"
-            )
-            if st.button("Confirmar Remoção da Conta", key="btn_remover_conta"):
-                if gerenciador.remover_conta(id_conta_remover):
-                    st.success("Conta e transações associadas removidas com sucesso!")
-                    gerenciador.salvar_dados()
-                    st.session_state.cache_posicoes = {}
-                    st.session_state.cache_faturas = {}
-                    st.rerun() # Rerun aqui é necessário para atualizar a sidebar e os selectboxes
-                else:
-                    st.error("Erro ao remover conta.")
-        else:
-            st.info("Nenhuma conta para remover.")
-
-    # --- Tab Cartões ---
-    with tab_cartoes:
-        st.header("Gerenciar Cartões de Crédito")
-
-        st.subheader("Cartões Cadastrados")
-        if gerenciador.cartoes_credito:
-            df_cartoes = pd.DataFrame([c.para_dict() for c in gerenciador.cartoes_credito])
-            st.dataframe(df_cartoes.drop(columns=["id_cartao"]), width='stretch')
-
-            cartoes_disponiveis = {c.id_cartao: c.nome for c in gerenciador.cartoes_credito}
-            selected_card_name = st.selectbox(
-                "Selecione um cartão:",
-                options=list(cartoes_disponiveis.values()),
-                key="select_card_tab_cartoes"
-            )
-            st.session_state.selected_card_id = next(
-                (id for id, name in cartoes_disponiveis.items() if name == selected_card_name),
-                None
-            )
-            
-            if st.session_state.selected_card_id:
-                cartao_selecionado = gerenciador.buscar_cartao_por_id(st.session_state.selected_card_id)
-                if cartao_selecionado:
-                    st.markdown(f"### Faturas de {cartao_selecionado.nome}")
-
-                    # Navegação entre ciclos
-                    ciclos_disponiveis = gerenciador.listar_ciclos_navegacao(cartao_selecionado.id_cartao)
+                    ticker_venda = st.selectbox("Ativo para Vender", ativos_disponiveis, format_func=lambda x: f"{x.ticker} ({x.quantidade:.6f} disponível)", key="ticker_venda")
                     
-                    if ciclos_disponiveis:
-                        ciclo_formatado = [f"{calendar.month_name[m].capitalize()}/{a}" for a, m in ciclos_disponiveis]
-                        
-                        # Tenta manter o ciclo atual se ele ainda estiver disponível
-                        if st.session_state.current_month_year in ciclos_disponiveis:
-                            idx_selecionado = ciclos_disponiveis.index(st.session_state.current_month_year)
-                        else:
-                            # Se não, seleciona o ciclo mais recente
-                            idx_selecionado = len(ciclos_disponiveis) - 1
-
-                        selected_ciclo_str = st.selectbox(
-                            "Selecione o ciclo:",
-                            options=ciclo_formatado,
-                            index=idx_selecionado,
-                            key="select_ciclo_cartao"
+                    col_venda1, col_venda2 = st.columns(2)
+                    with col_venda1:
+                        qtd_venda = st.number_input("Quantidade a Vender", min_value=0.000001, max_value=float(ticker_venda.quantidade), value=float(ticker_venda.quantidade), step=0.01, format="%.6f", key="qtd_venda")
+                    with col_venda2:
+                        preco_venda = st.number_input("Preço de Venda (R$ por unidade)", min_value=0.01, value=float(ticker_venda.preco_medio), step=0.01, format="%.2f", key="preco_venda")
+                    
+                    # Calcula preview do P/L
+                    valor_venda_preview = qtd_venda * preco_venda
+                    custo_medio_preview = qtd_venda * ticker_venda.preco_medio
+                    pl_preview = valor_venda_preview - custo_medio_preview
+                    pl_pct_preview = (pl_preview / custo_medio_preview * 100) if custo_medio_preview > 0 else 0
+                    
+                    if pl_preview >= 0:
+                        st.success(f"💰 **Lucro Estimado:** R$ {pl_preview:.2f} ({pl_pct_preview:+.2f}%)")
+                    else:
+                        st.error(f"📉 **Prejuízo Estimado:** R$ {abs(pl_preview):.2f} ({pl_pct_preview:.2f}%)")
+                    
+                    data_venda = st.date_input("Data da Venda", value=datetime.today(), format="DD/MM/YYYY", key="data_venda")
+                    obs_venda = st.text_input("Observação (opcional)", key="obs_venda")
+                    
+                    if st.button("✅ Confirmar Venda", type="primary", key="vender_btn"):
+                        sucesso, mensagem = st.session_state.gerenciador.vender_ativo(
+                            id_conta=conta_venda_sel.id_conta,
+                            ticker=ticker_venda.ticker,
+                            quantidade=qtd_venda,
+                            preco_venda=preco_venda,
+                            data_venda=data_venda.strftime("%Y-%m-%d"),
+                            observacao=obs_venda
                         )
-                        st.session_state.current_month_year = ciclos_disponiveis[ciclo_formatado.index(selected_ciclo_str)]
-                        
-                        ano_ciclo, mes_ciclo = st.session_state.current_month_year
-
-                        # Faturas fechadas para o ciclo
-                        faturas_fechadas = [
-                            f for f in gerenciador.faturas
-                            if f.id_cartao == cartao_selecionado.id_cartao
-                            and f.data_vencimento.year == ano_ciclo
-                            and f.data_vencimento.month == mes_ciclo
-                        ]
-
-                        if faturas_fechadas:
-                            fatura_atual = faturas_fechadas[0] # Pega a primeira (deve ser única por ciclo)
-                            st.info(f"Fatura fechada para {calendar.month_name[mes_ciclo].capitalize()}/{ano_ciclo}:")
-                            col_f1, col_f2, col_f3 = st.columns(3)
-                            col_f1.metric("Valor Total", formatar_moeda(fatura_atual.valor_total))
-                            col_f2.metric("Vencimento", fatura_atual.data_vencimento.strftime("%d/%m/%Y"))
-                            col_f3.metric("Status", fatura_atual.status)
-
-                            if fatura_atual.status == "Fechada":
-                                contas_corrente = {c.id_conta: c.nome for c in gerenciador.contas if isinstance(c, ContaCorrente)}
-                                if contas_corrente:
-                                    with st.form(f"form_pagar_fatura_{fatura_atual.id_fatura}"):
-                                        st.subheader("Pagar Fatura")
-                                        conta_pagamento_name = st.selectbox(
-                                            "Conta para Pagamento",
-                                            options=list(contas_corrente.values()),
-                                            key=f"conta_pagamento_{fatura_atual.id_fatura}"
-                                        )
-                                        id_conta_pagamento = next(
-                                            (id for id, name in contas_corrente.items() if name == conta_pagamento_name),
-                                            None
-                                        )
-                                        data_pagamento = st.date_input("Data do Pagamento", value="today", key=f"data_pagamento_{fatura_atual.id_fatura}")
-                                        if st.form_submit_button("Confirmar Pagamento"):
-                                            if id_conta_pagamento and gerenciador.pagar_fatura(fatura_atual.id_fatura, id_conta_pagamento, data_pagamento):
-                                                st.success("Fatura paga com sucesso!")
-                                                gerenciador.salvar_dados()
-                                                st.session_state.cache_posicoes = {}
-                                                st.session_state.cache_faturas = {}
-                                                st.rerun() # Rerun para atualizar o status da fatura
-                                            else:
-                                                st.error("Erro ao pagar fatura. Verifique o saldo da conta.")
-                                else:
-                                    st.warning("Nenhuma conta corrente disponível para pagamento de fatura.")
-                            
-                            st.markdown("#### Compras desta fatura")
-                            compras_fatura = [c for c in gerenciador.compras_cartao if c.id_fatura == fatura_atual.id_fatura]
-                            if compras_fatura:
-                                df_compras_fatura = pd.DataFrame([c.para_dict() for c in compras_fatura])
-                                df_compras_fatura["data_compra"] = pd.to_datetime(df_compras_fatura["data_compra"]).dt.date
-                                df_compras_fatura["data_compra_real"] = pd.to_datetime(df_compras_fatura["data_compra_real"]).dt.date
-                                df_compras_fatura["valor"] = df_compras_fatura["valor"].apply(formatar_moeda)
-                                st.dataframe(df_compras_fatura.drop(columns=["id_compra", "id_cartao", "id_compra_original", "id_fatura"]), width='stretch')
-                            else:
-                                st.info("Nenhuma compra nesta fatura.")
-
-                        else: # Fatura aberta
-                            st.info(f"Fatura aberta para {calendar.month_name[mes_ciclo].capitalize()}/{ano_ciclo}.")
-                            compras_abertas = gerenciador.obter_lancamentos_do_ciclo(cartao_selecionado.id_cartao, ano_ciclo, mes_ciclo)
-                            
-                            if compras_abertas:
-                                total_aberto = sum(c.valor for c in compras_abertas)
-                                st.metric("Valor Total da Fatura Aberta", formatar_moeda(total_aberto))
-                                
-                                df_compras_abertas = pd.DataFrame([c.para_dict() for c in compras_abertas])
-                                df_compras_abertas["data_compra"] = pd.to_datetime(df_compras_abertas["data_compra"]).dt.date
-                                df_compras_abertas["data_compra_real"] = pd.to_datetime(df_compras_abertas["data_compra_real"]).dt.date
-                                df_compras_abertas["valor"] = df_compras_abertas["valor"].apply(formatar_moeda)
-                                st.dataframe(df_compras_abertas.drop(columns=["id_compra", "id_cartao", "id_compra_original", "id_fatura"]), width='stretch')
-
-                                st.subheader("Fechar Fatura")
-                                with st.form(f"form_fechar_fatura_{cartao_selecionado.id_cartao}_{ano_ciclo}_{mes_ciclo}"):
-                                    data_fechamento = st.date_input("Data de Fechamento", value="today", key=f"data_fechamento_{ano_ciclo}_{mes_ciclo}")
-                                    data_vencimento = st.date_input("Data de Vencimento", value=data_fechamento + timedelta(days=10), key=f"data_vencimento_{ano_ciclo}_{mes_ciclo}")
-                                    if st.form_submit_button("Confirmar Fechamento da Fatura"):
-                                        fatura_fechada = gerenciador.fechar_fatura(cartao_selecionado.id_cartao, data_fechamento, data_vencimento)
-                                        if fatura_fechada:
-                                            st.success(f"Fatura fechada com sucesso! Valor: {formatar_moeda(fatura_fechada.valor_total)}")
-                                            gerenciador.salvar_dados()
-                                            st.session_state.cache_faturas = {}
-                                            st.rerun() # Rerun para atualizar o status da fatura
-                                        else:
-                                            st.error("Erro ao fechar fatura.")
-                            else:
-                                st.info(f"Nenhuma compra na fatura aberta de {calendar.month_name[mes_ciclo].capitalize()}/{ano_ciclo}.")
-                    else:
-                        st.info("Nenhum ciclo de fatura disponível para este cartão.")
-                else:
-                    st.warning("Cartão selecionado não encontrado.")
-            else:
-                st.info("Selecione um cartão para ver suas faturas.")
-
-            st.subheader("Registrar Compra no Cartão")
-            with st.form("form_nova_compra_cartao"):
-                cartoes_para_compra = {c.id_cartao: c.nome for c in gerenciador.cartoes_credito}
-                if cartoes_para_compra:
-                    selected_card_compra_name = st.selectbox(
-                        "Cartão de Crédito",
-                        options=list(cartoes_para_compra.values()),
-                        key="card_compra_select"
-                    )
-                    id_cartao_compra = next(
-                        (id for id, name in cartoes_para_compra.items() if name == selected_card_compra_name),
-                        None
-                    )
-                    descricao = st.text_input("Descrição da Compra", key="desc_compra_cartao")
-                    valor_total = st.number_input("Valor Total da Compra", min_value=0.01, format="%.2f", key="val_compra_cartao")
-                    data_compra_real = st.date_input("Data da Compra (real)", value="today", key="data_compra_real_cartao")
-                    categoria = st.selectbox("Categoria", gerenciador.categorias, key="cat_compra_cartao")
-                    num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1, step=1, key="parcelas_compra_cartao")
-                    observacao = st.text_area("Observação (opcional)", key="obs_compra_cartao")
-                    if st.form_submit_button("Registrar Compra"):
-                        if id_cartao_compra and gerenciador.registrar_compra_cartao(
-                            id_cartao_compra, descricao, valor_total, data_compra_real, categoria, num_parcelas, observacao
-                        ):
-                            st.success("Compra registrada com sucesso!")
-                            gerenciador.salvar_dados()
-                            st.session_state.cache_faturas = {}
-                            # st.rerun()
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.success(mensagem)
+                            st.rerun()
                         else:
-                            st.error("Erro ao registrar compra.")
-                else:
-                    st.warning("Nenhum cartão de crédito cadastrado para registrar compras.")
+                            st.error(mensagem)
 
-            st.subheader("Adicionar Novo Cartão de Crédito")
-            with st.form("form_novo_cartao"):
-                nome_novo_cartao = st.text_input("Nome do Cartão", key="nome_novo_cartao")
-                logo_url_novo_cartao = st.text_input("URL do Logo (opcional)", key="logo_novo_cartao")
-                dia_fechamento = st.number_input("Dia de Fechamento da Fatura", min_value=1, max_value=31, value=28, key="dia_fechamento_cartao")
-                dia_vencimento = st.number_input("Dia de Vencimento da Fatura", min_value=1, max_value=31, value=10, key="dia_vencimento_cartao")
-                if st.form_submit_button("Adicionar Cartão"):
-                    if nome_novo_cartao:
-                        novo_cartao = CartaoCredito(nome_novo_cartao, logo_url_novo_cartao, dia_fechamento, dia_vencimento)
-                        gerenciador.adicionar_cartao_credito(novo_cartao)
-                        gerenciador.salvar_dados()
-                        st.success(f"Cartão '{nome_novo_cartao}' adicionado com sucesso!")
-                        st.session_state.cache_faturas = {}
-                        st.rerun() # Rerun para atualizar os selectboxes
-                    else:
-                        st.error("O nome do cartão não pode ser vazio.")
-
-            st.subheader("Remover Cartão de Crédito")
-            if cartoes_disponiveis:
-                id_cartao_remover = st.selectbox(
-                    "Selecione o cartão para remover:",
-                    options=list(cartoes_disponiveis.keys()),
-                    format_func=lambda x: cartoes_disponiveis[x],
-                    key="select_remover_cartao"
-                )
-                if st.button("Confirmar Remoção do Cartão", key="btn_remover_cartao"):
-                    if gerenciador.remover_cartao_credito(id_cartao_remover):
-                        st.success("Cartão, compras e faturas associadas removidas com sucesso!")
-                        gerenciador.salvar_dados()
-                        st.session_state.cache_faturas = {}
-                        st.rerun() # Rerun para atualizar os selectboxes
-                    else:
-                        st.error("Erro ao remover cartão.")
+         # --------------------------
+        # Registrar Receita/Despesa (por ID, exibindo apenas nome)
+        # --------------------------
+        with st.expander("💸 Registrar Receita/Despesa", expanded=True):
+            contas_correntes = [
+                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
+            ]
+            if not contas_correntes:
+                st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
             else:
-                st.info("Nenhum cartão para remover.")
+                mapa_cc = {c.id_conta: c for c in contas_correntes}
+                ids_cc = list(mapa_cc.keys())
+                with st.form("new_transaction_form", clear_on_submit=True):
+                    tipo_transacao = st.selectbox("Tipo", ["Receita", "Despesa"])
+                    conta_selecionada_id = st.selectbox(
+                        "Conta Corrente",
+                        options=ids_cc,
+                        format_func=lambda cid: mapa_cc[cid].nome,
+                        key="tx_conta_corrente_id"
+                    )
+                    descricao = st.text_input("Descrição")
+                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                    valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
+                    data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+                    observacao = st.text_area("Observações (Opcional)")
+                    if st.form_submit_button("Registrar"):
+                        if not all([descricao, categoria]):
+                            st.error("Descrição e Categoria são obrigatórios.")
+                        else:
+                            sucesso = st.session_state.gerenciador.registrar_transacao(
+                                id_conta=conta_selecionada_id,
+                                descricao=descricao,
+                                valor=valor,
+                                tipo=tipo_transacao,
+                                data_transacao=data_transacao,
+                                categoria=categoria,
+                                observacao=observacao,
+                            )
+                            if sucesso:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.success("Transação registrada!")
+                                st.rerun()
+                            else:
+                                st.error("Falha ao registrar. Saldo insuficiente?")
 
-    # --- Tab Configurações ---
-    with tab_config:
-        st.header("Configurações")
+            # --------------------------
+            # Resumo (com valor atual de investimentos)
+            # --------------------------
+            st.header("Resumo Financeiro")
+            todas_as_contas = st.session_state.gerenciador.contas
+            if todas_as_contas:
+                saldos_agrupados = defaultdict(float)
+                patrimonio_total = 0.0
+            
+                for conta in todas_as_contas:
+                    if isinstance(conta, ContaCorrente):
+                        # Contas correntes: usa saldo direto
+                        saldos_agrupados["Contas Correntes"] += float(conta.saldo or 0.0)
+                        patrimonio_total += float(conta.saldo or 0.0)
+            
+                    elif isinstance(conta, ContaInvestimento):
+                        # Investimentos: usa posição atual (inclui rendimentos)
+                        pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+            
+                        saldo_caixa = float(pos.get("saldo_caixa", 0.0) or 0.0)
+                        total_valor_atual_ativos = float(pos.get("total_valor_atual_ativos", 0.0) or 0.0)
+                        patrimonio_atualizado = float(pos.get("patrimonio_atualizado", saldo_caixa + total_valor_atual_ativos) or 0.0)
+            
+                        # Agrupa caixa das corretoras
+                        saldos_agrupados["Caixa Corretoras"] += saldo_caixa
+            
+                        # Agrupa por tipo de ativo com VALOR ATUAL
+                        for item in pos.get("ativos", []):
+                            tipo = item.get("tipo", "Ativos")
+                            valor_atual = float(item.get("valor_atual", 0.0) or 0.0)
+                            saldos_agrupados[tipo] += valor_atual
+            
+                        # Patrimônio total usa o consolidado atualizado da conta de investimento
+                        patrimonio_total += patrimonio_atualizado
+            
+                st.subheader("Patrimônio por Categoria")
+                for categoria, saldo in saldos_agrupados.items():
+                    st.metric(label=categoria, value=formatar_moeda(saldo))
+            
+                st.divider()
+                st.metric(label="Patrimônio Total", value=formatar_moeda(patrimonio_total))
+            else:
+                st.metric(label="Patrimônio Total", value="R$ 0,00")
 
-        st.subheader("Categorias")
-        if gerenciador.categorias:
-            st.write("Categorias Atuais:")
-            st.write(", ".join(gerenciador.categorias))
-        
-        with st.form("form_add_categoria"):
-            nova_categoria = st.text_input("Adicionar Nova Categoria", key="nova_categoria_input")
-            if st.form_submit_button("Adicionar Categoria"):
-                if nova_categoria:
-                    gerenciador.adicionar_categoria(nova_categoria)
-                    gerenciador.salvar_dados()
-                    st.success(f"Categoria '{nova_categoria}' adicionada.")
-                    st.rerun()
+
+
+    with col1:
+        st.header("Realizar Transferência")
+        todas_as_contas = st.session_state.gerenciador.contas
+
+        if len(todas_as_contas) >= 2:
+            # Mapa por ID, exibindo apenas nome
+            mapa_todas = {c.id_conta: c for c in todas_as_contas}
+            ids_todas = list(mapa_todas.keys())
+
+            with st.form("transfer_form", clear_on_submit=True):
+                # Seleção por ID (valor único), mostrando apenas nome
+                conta_origem_id = st.selectbox(
+                    "De:",
+                    options=ids_todas,
+                    format_func=lambda cid: mapa_todas[cid].nome,
+                    key="transfer_origem_id"
+                )
+
+                ids_destino = [cid for cid in ids_todas if cid != conta_origem_id]
+                conta_destino_id = st.selectbox(
+                    "Para:",
+                    options=ids_destino,
+                    format_func=lambda cid: mapa_todas[cid].nome,
+                    key="transfer_destino_id"
+                )
+
+                valor_transferencia = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="transfer_valor")
+
+                # Validação específica de saldo_caixa quando origem é ContaInvestimento
+                conta_origem_obj = mapa_todas[conta_origem_id]
+                if isinstance(conta_origem_obj, ContaInvestimento):
+                    saldo_caixa_origem = float(conta_origem_obj.saldo_caixa)
+                    if valor_transferencia > saldo_caixa_origem:
+                        st.warning(
+                            f"Saldo em caixa insuficiente na corretora de origem. Caixa atual: "
+                            f"{formatar_moeda(saldo_caixa_origem)}. "
+                            f"Para transferir, é necessário ter saldo em caixa (não apenas em ativos)."
+                        )
+
+                if st.form_submit_button("Confirmar Transferência", use_container_width=True):
+                    ok = st.session_state.gerenciador.realizar_transferencia(
+                        conta_origem_id, conta_destino_id, valor_transferencia
+                    )
+                    if ok:
+                        st.session_state.gerenciador.salvar_dados()
+                        st.success("Transferência realizada!")
+                        st.rerun()
+                    else:
+                        if isinstance(conta_origem_obj, ContaCorrente):
+                            st.error("Falha na transferência. Saldo insuficiente na conta corrente (considerando o limite)?")
+                        else:
+                            st.error("Falha na transferência. Saldo em caixa insuficiente na conta de investimento de origem.")
+        else:
+            st.info("Adicione pelo menos duas contas para realizar transferências.")
+
+
+# --- HISTÓRICO ---
+with tab_transacoes:
+    st.header("Histórico de Todas as Transações")
+    transacoes = st.session_state.gerenciador.transacoes
+    if not transacoes:
+        st.info("Nenhuma transação registrada ainda.")
+    else:
+        mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
+        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
+        col_data.write("Data")
+        col_conta.write("Conta")
+        col_desc.write("Descrição")
+        col_cat.write("Categoria")
+        col_valor.write("Valor")
+        col_acao.write("Ação")
+        st.divider()
+
+        for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 4, 2, 2, 1])
+            with col1:
+                st.text(t.data.strftime("%d/%m/%Y"))
+            with col2:
+                st.text(mapa_contas.get(t.id_conta, "N/A"))
+            with col3:
+                # Destaque para vendas de investimento com emoji
+                if t.categoria == "Venda de Investimento":
+                    if "Lucro:" in t.descricao:
+                        st.text(f"💰 {t.descricao}")
+                    elif "Prejuízo:" in t.descricao:
+                        st.text(f"📉 {t.descricao}")
+                    else:
+                        st.text(t.descricao)
                 else:
-                    st.error("O nome da categoria não pode ser vazio.")
-        
-        if gerenciador.categorias:
-            with st.form("form_remover_categoria"):
-                categoria_remover = st.selectbox("Remover Categoria", gerenciador.categorias, key="remover_categoria_select")
-                if st.form_submit_button("Remover Categoria"):
-                    gerenciador.remover_categoria(categoria_remover)
-                    gerenciador.salvar_dados()
-                    st.success(f"Categoria '{categoria_remover}' removida.")
+                    st.text(t.descricao)
+            with col4:
+                st.text(t.categoria)
+            with col5:
+                valor_str = f"+{formatar_moeda(t.valor)}" if t.tipo == "Receita" else f"-{formatar_moeda(t.valor)}"
+                cor = "green" if t.tipo == "Receita" else "red"
+                st.markdown(f"<p style='color:{cor};'>{valor_str}</p>", unsafe_allow_html=True)
+            with col6:
+                if st.button("🗑️", key=f"del_{t.id_transacao}", help="Excluir esta transação"):
+                    st.session_state.transacao_para_excluir = t.id_transacao
                     st.rerun()
 
-        st.subheader("Salvar/Carregar Dados")
-        if st.button("Salvar Dados Agora", key="btn_salvar_dados"):
-            gerenciador.salvar_dados()
-            st.success("Dados salvos com sucesso!")
-        
-        st.info(f"Os dados são salvos automaticamente em '{gerenciador.caminho_arquivo}'.")
+            # Exibir observação com destaque para P/L
+            if getattr(t, "observacao", None):
+                with st.expander("📝 Detalhes", expanded=False):
+                    # Se for venda de investimento, destaca o P/L
+                    if t.categoria == "Venda de Investimento" and "P/L:" in t.observacao:
+                        if "+" in t.observacao:
+                            st.success(f"💰 {t.observacao}")
+                        else:
+                            st.error(f"📉 {t.observacao}")
+                    else:
+                        st.write(t.observacao)
 
-if __name__ == "__main__":
-    main()
+            if st.session_state.transacao_para_excluir == t.id_transacao:
+                st.warning(f"Tem certeza que deseja excluir a transação '{t.descricao}'?")
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.button("Sim, excluir", key=f"confirm_del_{t.id_transacao}", type="primary"):
+                        sucesso = st.session_state.gerenciador.remover_transacao(t.id_transacao)
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast("Transação removida!")
+                            st.session_state.transacao_para_excluir = None
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível remover a transação.")
+                with col_cancel:
+                    if st.button("Cancelar", key=f"cancel_del_{t.id_transacao}"):
+                        st.session_state.transacao_para_excluir = None
+                        st.rerun()
+            st.divider()
+
+# --- CONTAS ---
+with tab_contas:
+    st.header("Gerenciar Contas")
+    col_contas1, col_contas2 = st.columns(2)
+
+    with col_contas2:
+        with st.form("add_account_form", clear_on_submit=True):
+            st.subheader("Adicionar Nova Conta")
+            tipo_conta = st.selectbox("Tipo de Conta", ["Conta Corrente", "Conta Investimento"])
+            nome_conta = st.text_input("Nome da Conta")
+            logo_url_add = st.text_input("URL do Logo (Opcional)")
+            if tipo_conta == "Conta Corrente":
+                saldo_inicial = st.number_input("Saldo Inicial (R$)", min_value=0.0, format="%.2f")
+                limite = st.number_input("Limite do Cheque Especial (R$)", min_value=0.0, format="%.2f")
+            if st.form_submit_button("Adicionar Conta", use_container_width=True):
+                if not nome_conta:
+                    st.error("O nome da conta é obrigatório.")
+                else:
+                    nova_conta = None
+                    if tipo_conta == "Conta Corrente":
+                        nova_conta = ContaCorrente(
+                            nome=nome_conta,
+                            saldo=saldo_inicial,
+                            limite_cheque_especial=limite,
+                            logo_url=logo_url_add,
+                        )
+                    else:
+                        nova_conta = ContaInvestimento(nome=nome_conta, logo_url=logo_url_add)
+                    if nova_conta:
+                        st.session_state.gerenciador.adicionar_conta(nova_conta)
+                        st.session_state.gerenciador.salvar_dados()
+                        st.success(f"Conta '{nome_conta}' adicionada!")
+                        st.rerun()
+
+    with col_contas1:
+        st.subheader("Contas Existentes")
+        todas_as_contas = st.session_state.gerenciador.contas
+        if not todas_as_contas:
+            st.info("Nenhuma conta cadastrada.")
+        else:
+            tab_cc_ger, tab_ci_ger = st.tabs(["Contas Correntes", "Contas de Investimento"])
+
+            def render_conta_com_confirmacao(conta):
+                logo_col, expander_col = st.columns([1, 5])
+                with logo_col:
+                    if conta.logo_url:
+                        st.image(conta.logo_url, width=65)
+                    else:
+                        st.write("🏦" if isinstance(conta, ContaCorrente) else "📈")
+                
+                # Valor do título do expansor:
+                # - ContaCorrente: saldo
+                # - ContaInvestimento: patrimônio atualizado (saldo_caixa + valor atual dos ativos)
+                if isinstance(conta, ContaInvestimento):
+                    pos_header = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+                    patrimonio_header = pos_header.get("patrimonio_atualizado", float(conta.saldo))
+                else:
+                    patrimonio_header = float(conta.saldo)
+                
+                with expander_col:
+                    with st.expander(f"{conta.nome} - {formatar_moeda(patrimonio_header)}"):
+                        if isinstance(conta, ContaCorrente):
+                            st.write(f"Limite: {formatar_moeda(conta.limite_cheque_especial)}")
+                        elif isinstance(conta, ContaInvestimento):
+                            # Métricas base (preço médio)
+                            st.metric("Patrimônio Consolidado (preço médio)", formatar_moeda(conta.saldo))
+                            col_caixa, col_ativos = st.columns(2)
+                            col_caixa.metric("Saldo em Caixa", formatar_moeda(conta.saldo_caixa))
+                            col_ativos.metric("Valor em Ativos (preço médio)", formatar_moeda(conta.valor_em_ativos))
+
+                            st.divider()
+                            st.write("Cotações e Posição Atual")
+
+                            col_btn, _ = st.columns([1, 5])
+                            with col_btn:
+                                if st.button("Atualizar cotações", key=f"upd_quotes_{conta.id_conta}"):
+                                    st.session_state.gerenciador._cotacoes_cache = {}
+                                    st.rerun()
+
+                            pos = st.session_state.gerenciador.calcular_posicao_conta_investimento(conta.id_conta)
+                            if not pos or not pos["ativos"]:
+                                st.info("Nenhum ativo nesta conta ainda.")
+                            else:
+                                met1, met2, met3 = st.columns(3)
+                                met1.metric("Saldo em Caixa", formatar_moeda(pos["saldo_caixa"]))
+                                met2.metric("Valor Atual em Ativos", formatar_moeda(pos["total_valor_atual_ativos"]))
+                                met3.metric("Patrimônio Atualizado", formatar_moeda(pos["patrimonio_atualizado"]))
+
+                                # Detalhe por ativo
+                                st.caption("Detalhe por ativo:")
+
+                                def _to_float(x):
+                                    return float(x) if x is not None else None
+
+                                linhas = []
+                                for item in pos.get("ativos", []):
+                                    linhas.append({
+                                        "Ticker": item.get("ticker", ""),
+                                        "Tipo": item.get("tipo", ""),
+                                        "Quantidade": float(item.get("quantidade", 0.0) or 0.0),
+                                        "Preço Médio": float(item.get("preco_medio", 0.0) or 0.0),
+                                        "Preço Atual": _to_float(item.get("preco_atual")),
+                                        "Valor Atual": _to_float(item.get("valor_atual")),
+                                        "P/L (R$)": _to_float(item.get("pl")),
+                                        "P/L (%)": _to_float(item.get("pl_pct")),
+                                    })
+
+                                df = pd.DataFrame(linhas)
+                                colunas = ["Ticker", "Tipo", "Quantidade", "Preço Médio", "Preço Atual", "Valor Atual", "P/L (R$)", "P/L (%)"]
+                                df = df[colunas] if not df.empty else pd.DataFrame(columns=colunas)
+
+                                def _fmt_num6(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    # Se valor >= 1000, formata sem casas decimais (ex.: 1.500.000)
+                                    if v >= 1000:
+                                        return f"{v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    # Se valor >= 1, formata com 2 casas (ex.: 123,45)
+                                    elif v >= 1:
+                                        return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    # Se valor < 1, formata com até 6 casas (ex.: 0,000123)
+                                    else:
+                                        return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                                def _fmt_preco_cripto(v: float) -> str:
+                                    """Formata preços incluindo criptos de centavos (pode ter até 8 casas)"""
+                                    if pd.isna(v):
+                                        return ""
+                                    if v >= 1000:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 0.01:
+                                        return f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        # Para valores muito pequenos (< 0,01), mostra até 8 casas
+                                        return f"R$ {v:,.8f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_moeda(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_pct(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    return f"{v:.2f}%".replace(".", ",")
+                                
+                                def _cor_pl(val: float) -> str:
+                                    if pd.isna(val):
+                                        return ""
+                                    return "color: red;" if val < 0 else "color: #0b3d91;"
+                                
+                                styled = (
+                                    df.style
+                                      .format({
+                                          "Quantidade": _fmt_num6,
+                                          "Preço Médio": _fmt_preco_cripto,
+                                          "Preço Atual": _fmt_preco_cripto,
+                                          "Valor Atual": lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                          "P/L (R$)": lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                          "P/L (%)": lambda v: f"{v:,.2f}%".replace(",", "X").replace(".", ",").replace("X", "."),
+                                      })
+                                      .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
+                                      .hide(axis="index")
+                                )
+                                
+                                st.dataframe(styled, use_container_width=True)
+
+                                st.divider()
+                                st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
+                            
+                            st.divider()
+                            # Ativos (base de custo)
+                            if conta.ativos:
+                                st.write("Ativos (base de custo):")
+                                df_ativos = pd.DataFrame([a.para_dict() for a in conta.ativos])
+                                df_ativos["valor_total"] = df_ativos.apply(
+                                    lambda row: row["quantidade"] * row["preco_medio"], axis=1
+                                )
+                                
+                                # Formatação inteligente da quantidade (mesma lógica do "Detalhe por ativo")
+                                def _fmt_qtd_base(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    if v >= 1000:
+                                        return f"{v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        return f"{v:,.6f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                def _fmt_moeda_base(v: float) -> str:
+                                    if pd.isna(v):
+                                        return ""
+                                    if v >= 1000:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 1:
+                                        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    elif v >= 0.01:
+                                        return f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    else:
+                                        # Para valores muito pequenos (< 0,01), mostra até 8 casas
+                                        return f"R$ {v:,.8f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                
+                                styled_base = (
+                                    df_ativos[["ticker", "quantidade", "preco_medio", "tipo_ativo", "valor_total"]]
+                                    .style.format({
+                                        "quantidade": _fmt_qtd_base,
+                                        "preco_medio": _fmt_moeda_base,
+                                        "valor_total": _fmt_moeda_base,
+                                    })
+                                    .hide(axis="index")
+                                )
+                                
+                                st.dataframe(styled_base, use_container_width=True)
+                            
+                        st.divider()
+                        with st.form(f"edit_form_{conta.id_conta}"):
+                            novo_nome = st.text_input("Nome", value=conta.nome)
+                            nova_logo_url = st.text_input("URL do Logo", value=conta.logo_url)
+                            if isinstance(conta, ContaCorrente):
+                                novo_limite = st.number_input(
+                                    "Limite", min_value=0.0, value=float(conta.limite_cheque_especial), format="%.2f"
+                                )
+                            if st.form_submit_button("Salvar Alterações"):
+                                nome_mudou = conta.editar_nome(novo_nome)
+                                logo_mudou = conta.editar_logo_url(nova_logo_url)
+                                attr_mudou = False
+                                if isinstance(conta, ContaCorrente):
+                                    attr_mudou = conta.editar_limite(novo_limite)
+                                if nome_mudou or logo_mudou or attr_mudou:
+                                    st.session_state.gerenciador.salvar_dados()
+                                    st.toast(f"Conta '{novo_nome}' atualizada!")
+                                    st.rerun()
+                        if st.button("Remover Conta", key=f"remove_{conta.id_conta}", type="primary"):
+                            st.session_state.conta_para_excluir = conta.id_conta
+                            st.rerun()
+
+                if st.session_state.conta_para_excluir == conta.id_conta:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a conta '{conta.nome}'?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 4])
+                    with col_confirm:
+                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_acc_{conta.id_conta}", type="primary"):
+                            if st.session_state.gerenciador.remover_conta(conta.id_conta):
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Conta '{conta.nome}' removida!")
+                                st.session_state.conta_para_excluir = None
+                                st.rerun()
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_acc_{conta.id_conta}"):
+                            st.session_state.conta_para_excluir = None
+                            st.rerun()
+
+            with tab_cc_ger:
+                contas_correntes = [c for c in todas_as_contas if isinstance(c, ContaCorrente)]
+                if not contas_correntes:
+                    st.info("Nenhuma conta corrente cadastrada.")
+                for conta in contas_correntes:
+                    render_conta_com_confirmacao(conta)
+
+            with tab_ci_ger:
+                contas_investimento = [c for c in todas_as_contas if isinstance(c, ContaInvestimento)]
+                if not contas_investimento:
+                    st.info("Nenhuma conta de investimento cadastrada.")
+                for conta in contas_investimento:
+                    render_conta_com_confirmacao(conta)
+
+# --- CARTÕES ---
+with tab_cartoes:
+    st.header("Gerenciar Cartões de Crédito")
+    col_cartoes1, col_cartoes2 = st.columns(2)
+
+    with col_cartoes2:
+        with st.form("add_card_form", clear_on_submit=True):
+            st.subheader("Adicionar Novo Cartão")
+            nome_cartao = st.text_input("Nome do Cartão")
+            logo_url_cartao = st.text_input("URL do Logo (Opcional)")
+            dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=28)
+            dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=10)
+            if st.form_submit_button("Adicionar Cartão", use_container_width=True):
+                if not nome_cartao:
+                    st.error("O nome do cartão é obrigatório.")
+                else:
+                    novo_cartao = CartaoCredito(
+                        nome=nome_cartao,
+                        logo_url=logo_url_cartao,
+                        dia_fechamento=dia_fechamento,
+                        dia_vencimento=dia_vencimento,
+                    )
+                    st.session_state.gerenciador.adicionar_cartao_credito(novo_cartao)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.success(f"Cartão '{nome_cartao}' adicionado!")
+                    st.rerun()
+
+        st.subheader("Lançar Compra no Cartão")
+        cartoes_cadastrados = st.session_state.gerenciador.cartoes_credito
+        if not cartoes_cadastrados:
+            st.warning("Adicione um cartão de crédito para poder lançar compras.")
+        else:
+            # Por ID, exibindo apenas nome do cartão
+            mapa_cartao = {c.id_cartao: c for c in cartoes_cadastrados}
+            ids_cartao = list(mapa_cartao.keys())
+            with st.form("add_card_purchase_form", clear_on_submit=True):
+                cartao_selecionado_id = st.selectbox(
+                    "Cartão Utilizado",
+                    options=ids_cartao,
+                    format_func=lambda cid: mapa_cartao[cid].nome,
+                    key="purchase_cartao_id"
+                )
+                descricao_compra = st.text_input("Descrição da Compra")
+                categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
+                data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
+                num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
+                observacao_compra = st.text_area("Observações (Opcional)")
+                if st.form_submit_button("Lançar Compra", use_container_width=True):
+                    if not all([descricao_compra, categoria_compra, valor_compra > 0]):
+                        st.error("Preencha todos os detalhes da compra.")
+                    else:
+                        sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                            id_cartao=cartao_selecionado_id,
+                            descricao=descricao_compra,
+                            valor_total=valor_compra,
+                            data_compra=data_compra_cartao,  # data real
+                            categoria=categoria_compra,
+                            num_parcelas=num_parcelas,
+                            observacao=observacao_compra,
+                        )
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.success("Compra registrada com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error("Falha ao registrar a compra.")
+
+    with col_cartoes1:
+        st.subheader("Faturas dos Cartões")
+        cartoes = st.session_state.gerenciador.cartoes_credito
+        if not cartoes:
+            st.info("Nenhum cartão de crédito cadastrado.")
+        else:
+            for cartao in cartoes:
+                logo_col, expander_col = st.columns([1, 5])
+
+                with logo_col:
+                    if cartao.logo_url:
+                        st.image(cartao.logo_url, width=65)
+                    else:
+                        st.write("💳")
+
+                with expander_col:
+                    ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao)
+                    if not ciclos:
+                        hoje = date.today()
+                        ciclos = st.session_state.gerenciador.listar_ciclos_navegacao(cartao.id_cartao, hoje)
+
+                    padrao = st.session_state.gerenciador.ciclo_aberto_mais_antigo(cartao.id_cartao) or ciclos[0]
+                    labels = [f"{mes:02d}/{ano}" for (ano, mes) in ciclos]
+                    idx_padrao = ciclos.index(padrao) if padrao in ciclos else 0
+
+                    sel_label = st.selectbox(
+                        "Ciclo de Referência",
+                        options=labels,
+                        index=idx_padrao,
+                        key=f"ciclo_ref_{cartao.id_cartao}",
+                    )
+                    sel_idx = labels.index(sel_label)
+                    sel_ano, sel_mes = ciclos[sel_idx]
+
+                    aberto_do_ciclo = st.session_state.gerenciador.obter_lancamentos_do_ciclo(cartao.id_cartao, sel_ano, sel_mes)
+                    valor_fatura_aberta = sum(c.valor for c in aberto_do_ciclo)
+                    futuros = st.session_state.gerenciador.obter_lancamentos_futuros_desde(cartao.id_cartao, sel_ano, sel_mes)
+                    faturas_fechadas = [f for f in st.session_state.gerenciador.faturas if f.id_cartao == cartao.id_cartao]
+
+                    with st.expander(f"{cartao.nome} - Fatura Aberta ({sel_label}): {formatar_moeda(valor_fatura_aberta)}"):
+                        tab_aberta, tab_futuros, tab_fechadas = st.tabs(["Lançamentos em Aberto", "Lançamentos Futuros", "Histórico de Faturas"])
+
+                        with tab_aberta:
+                            st.metric("Total em Aberto (Ciclo Selecionado)", formatar_moeda(valor_fatura_aberta))
+                            if not aberto_do_ciclo:
+                                st.info("Nenhum lançamento em aberto para o ciclo selecionado.")
+                            else:
+                                for compra in sorted(aberto_do_ciclo, key=lambda x: x.data_compra):
+                                    c1, c2 = st.columns([4, 1])
+                                    venc_str = compra.data_compra.strftime("%d/%m/%Y")
+                                    real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    desc = f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}"
+                                    c1.text(desc)
+                                    with c2:
+                                        if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
+                                            st.session_state.compra_para_excluir = compra.id_compra_original
+                                            st.rerun()
+
+                                    if getattr(compra, "observacao", None):
+                                        with st.expander("Observação", expanded=False):
+                                            st.write(compra.observacao)
+
+                                    if st.session_state.compra_para_excluir == compra.id_compra_original:
+                                        st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
+                                        cc1, cc2 = st.columns(2)
+                                        if cc1.button("Sim, excluir", key=f"conf_del_compra_{compra.id_compra}", type="primary"):
+                                            st.session_state.gerenciador.remover_compra_cartao(compra.id_compra_original)
+                                            st.session_state.gerenciador.salvar_dados()
+                                            st.toast("Compra removida!")
+                                            st.session_state.compra_para_excluir = None
+                                            st.rerun()
+                                        if cc2.button("Cancelar", key=f"cancel_del_compra_{compra.id_compra}"):
+                                            st.session_state.compra_para_excluir = None
+                                            st.rerun()
+
+                            st.divider()
+                            with st.form(f"close_bill_form_{cartao.id_cartao}", clear_on_submit=True):
+                                st.write("Fechar Fatura")
+                                col_form_f1, col_form_f2 = st.columns(2)
+                                try:
+                                    data_venc_sugerida = date(sel_ano, sel_mes, 10)
+                                except Exception:
+                                    data_venc_sugerida = date(sel_ano, sel_mes, 1)
+
+                                data_fechamento_real = col_form_f1.date_input("Data Real do Fechamento", value=date.today(), format="DD/MM/YYYY")
+                                data_vencimento_real = col_form_f2.date_input("Data Real do Vencimento", value=data_venc_sugerida, format="DD/MM/YYYY")
+                                if st.form_submit_button("Confirmar Fechamento", type="primary"):
+                                    nova_fatura = st.session_state.gerenciador.fechar_fatura(cartao.id_cartao, data_fechamento_real, data_vencimento_real)
+                                    if nova_fatura:
+                                        st.session_state.gerenciador.salvar_dados()
+                                        st.success(f"Fatura de {nova_fatura.data_vencimento.strftime('%m/%Y')} fechada!")
+                                        st.rerun()
+                                    else:
+                                        st.warning("Nenhuma compra encontrada no período para fechar a fatura.")
+
+                        with tab_futuros:
+                            total_futuro = sum(c.valor for c in futuros)
+                            st.metric("Total Futuro (Próximas Competências)", formatar_moeda(total_futuro))
+                            if not futuros:
+                                st.info("Nenhum lançamento futuro para este cartão.")
+                            else:
+                                for compra in sorted(futuros, key=lambda x: (x.data_compra.year, x.data_compra.month, x.data_compra.day)):
+                                    venc_str = compra.data_compra.strftime("%d/%m/%Y")
+                                    real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    st.text(f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}")
+
+                                    if getattr(compra, "observacao", None):
+                                        with st.expander("Observação", expanded=False):
+                                            st.write(compra.observacao)
+
+                        with tab_fechadas:
+                            if not faturas_fechadas:
+                                st.info("Nenhuma fatura fechada para este cartão.")
+                            else:
+                                for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
+                                    fatura_col1, fatura_col2 = st.columns([3, 1])
+                                    cor = "green" if fatura.status == "Paga" else "red"
+                                    fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", formatar_moeda(fatura.valor_total))
+                                    fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
+
+                                    with st.expander("Ver Lançamentos"):
+                                        lancamentos_fatura = [
+                                            c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura
+                                        ]
+                                        if not lancamentos_fatura:
+                                            st.caption("Nenhum lançamento encontrado para esta fatura.")
+                                        else:
+                                            for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
+                                                venc_str = lanc.data_compra.strftime("%d/%m/%Y")
+                                                real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
+                                                st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
+
+                                                if getattr(lanc, "observacao", None):
+                                                    with st.expander("Observação", expanded=False):
+                                                        st.write(lanc.observacao)
+
+                                    if fatura.status == "Fechada":
+                                        with st.text(""):
+                                            pass
+                                        with fatura_col2:
+                                            if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
+                                                st.session_state.fatura_para_pagar = fatura.id_fatura
+                                                st.rerun()
+                                    else:
+                                        fatura_col2.success("Paga")
+
+                                    if st.session_state.fatura_para_pagar == fatura.id_fatura:
+                                        with st.form(f"pay_bill_form_{fatura.id_fatura}"):
+                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
+                                            contas_correntes_pagamento = [
+                                                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
+                                            ]
+                                            # Por ID, exibindo apenas nome
+                                            mapa_cc_pag = {c.id_conta: c for c in contas_correntes_pagamento}
+                                            ids_cc_pag = list(mapa_cc_pag.keys())
+
+                                            conta_pagamento_id = st.selectbox(
+                                                "Pagar com a conta:",
+                                                options=ids_cc_pag,
+                                                format_func=lambda cid: mapa_cc_pag[cid].nome,
+                                                key=f"pay_fatura_conta_id_{fatura.id_fatura}"
+                                            )
+                                            data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
+                                            if st.form_submit_button("Confirmar Pagamento"):
+                                                sucesso = st.session_state.gerenciador.pagar_fatura(
+                                                    fatura.id_fatura, conta_pagamento_id, data_pagamento
+                                                )
+                                                if sucesso:
+                                                    st.session_state.gerenciador.salvar_dados()
+                                                    st.toast("Fatura paga com sucesso!")
+                                                    st.session_state.fatura_para_pagar = None
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Pagamento falhou. Saldo insuficiente.")
+                                        if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
+                                            st.session_state.fatura_para_pagar = None
+                                            st.rerun()
+
+                        st.divider()
+                        if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
+                            st.session_state.cartao_para_excluir = cartao.id_cartao
+                            st.rerun()
+
+                if st.session_state.cartao_para_excluir == cartao.id_cartao:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir o cartão '{cartao.nome}' e todos os seus lançamentos associados?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+                    with col_confirm:
+                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_card_{cartao.id_cartao}", type="primary"):
+                            if st.session_state.gerenciador.remover_cartao_credito(cartao.id_cartao):
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Cartão '{cartao.nome}' removido!")
+                                st.session_state.cartao_para_excluir = None
+                                st.rerun()
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
+                            st.session_state.cartao_para_excluir = None
+                            st.rerun()
+
+# --- CONFIGURAÇÕES ---
+with tab_config:
+    st.header("Configurações Gerais")
+    st.subheader("Gerenciar Categorias")
+
+    # Colunas da seção de categorias: lista à esquerda, criação à direita
+    col_cat1, col_cat2 = st.columns([3, 2])
+
+    with col_cat1:
+        st.write("Categorias existentes:")
+        categorias = st.session_state.gerenciador.categorias
+
+        if not categorias:
+            st.info("Nenhuma categoria cadastrada.")
+        else:
+            for cat in categorias:
+                cat_col1, cat_col2 = st.columns([4, 1])
+
+                cat_col1.write(f"- {cat}")
+
+                # Botão da lixeira: aciona confirmação ao invés de excluir direto
+                if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
+                    st.session_state.categoria_para_excluir = cat
+                    st.rerun()
+
+                # Bloco de confirmação
+                if st.session_state.categoria_para_excluir == cat:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+
+                    with col_confirm:
+                        if st.button(
+                            "Sim, excluir permanentemente",
+                            key=f"confirm_del_cat_{cat}",
+                            type="primary"
+                        ):
+                            st.session_state.gerenciador.remover_categoria(cat)
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"Categoria '{cat}' removida!")
+                            st.session_state.categoria_para_excluir = None
+                            st.rerun()
+
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
+                            st.session_state.categoria_para_excluir = None
+                            st.rerun()
+
+    with col_cat2:
+        st.write("Nova categoria")
+        nova_cat = st.text_input("Nome da categoria", key="nova_categoria_input")
+        if st.button("Adicionar categoria", key="add_categoria_btn"):
+            nome = (nova_cat or "").strip()
+            if not nome:
+                st.warning("Informe um nome para a categoria.")
+            elif nome in st.session_state.gerenciador.categorias:
+                st.info(f"A categoria '{nome}' já existe.")
+            else:
+                st.session_state.gerenciador.adicionar_categoria(nome)
+                st.session_state.gerenciador.salvar_dados()
+                st.toast(f"Categoria '{nome}' adicionada!")
+                st.rerun()
