@@ -551,11 +551,11 @@ with tab_contas:
                                           "P/L (R$)": lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
                                           "P/L (%)": lambda v: f"{v:,.2f}%".replace(",", "X").replace(".", ",").replace("X", "."),
                                       })
-                                      .applymap(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
+                                      .map(_cor_pl, subset=["P/L (R$)", "P/L (%)"])
                                       .hide(axis="index")
                                 )
                                 
-                                st.dataframe(styled, use_container_width=True)
+                                st.dataframe(styled, width="stretch")
 
                                 st.divider()
                                 st.caption("Obs.: Cotações provenientes do Yahoo Finance (yfinance). Alguns ativos podem não ter preço disponível.")
@@ -603,7 +603,7 @@ with tab_contas:
                                     .hide(axis="index")
                                 )
                                 
-                                st.dataframe(styled_base, use_container_width=True)
+                                st.dataframe(styled_base, width="stretch")
                             
                         st.divider()
                         with st.form(f"edit_form_{conta.id_conta}"):
