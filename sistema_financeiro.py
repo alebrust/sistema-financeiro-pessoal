@@ -1004,39 +1004,7 @@ class GerenciadorContas:
 
         raise ValueError(f"Cotação indisponível para {symbol}")
 
-    def _obter_preco_yf(self, symbol: str) -> float:
-        tk = yf.Ticker(symbol)
-
-        try:
-            fi = getattr(tk, "fast_info", None)
-            if fi:
-                last = fi.get("last_price") or fi.get("lastPrice")
-                if last is None:
-                    last = fi.get("last_price")
-                if last is not None and float(last) > 0:
-                    return float(last)
-        except Exception:
-            pass
-
-        try:
-            hist = tk.history(period="1d")
-            if hist is not None and not hist.empty:
-                last = hist["Close"].iloc[-1]
-                if last is not None and float(last) > 0:
-                    return float(last)
-        except Exception:
-            pass
-
-        try:
-            info = tk.info or {}
-            last = info.get("regularMarketPrice")
-            if last is not None and float(last) > 0:
-                return float(last)
-        except Exception:
-            pass
-
-        raise ValueError(f"Cotação indisponível para {symbol}")
-
+    
     def obter_preco_atual(self, ticker: str, tipo_ativo: str) -> Optional[float]:
         """
         Retorna o preço atual (em BRL) de um ativo.
