@@ -45,10 +45,11 @@ def inicializar_gerenciador():
         st.session_state.current_month_year = (date.today().year, date.today().month)
 
 # --- Funções de Cache para Streamlit ---
-@st.cache_data(ttl=3600) # Cache por 1 hora
-def obter_posicao_conta_investimento_cached(gerenciador_instance, conta_id):
-    return gerenciador_instance.calcular_posicao_conta_investimento(conta_id)
-
+@st.cache_data(ttl=3600)
+def obter_posicao_conta_investimento_cached(_gerenciador_instance, conta_id: str):
+    """Cache de 1 hora para cálculo de posição"""
+    return _gerenciador_instance.calcular_posicao_conta_investimento(conta_id)
+    
 @st.cache_data(ttl=3600) # Cache por 1 hora
 def obter_faturas_cartao_cached(gerenciador_instance, id_cartao):
     # Este método não existe no gerenciador, é um placeholder para cachear faturas se implementado
