@@ -326,31 +326,61 @@ with tab_transacoes:
         periodo = st.selectbox(
             "📅 Filtrar por Período:",
             ["Últimos 30 dias", "Últimos 3 meses", "Últimos 6 meses", 
-             "Este ano", "Ano passado", "Tudo"],
+             "Este ano", "Ano passado", "Período Personalizado", "Tudo"],
             index=1,  # Padrão: últimos 3 meses
             key="filtro_periodo_transacoes"
         )
     
     # Calcula data limite
     hoje = date.today()
-    if periodo == "Últimos 30 dias":
-        data_limite = hoje - timedelta(days=30)
-    elif periodo == "Últimos 3 meses":
-        data_limite = hoje - relativedelta(months=3)
-    elif periodo == "Últimos 6 meses":
-        data_limite = hoje - relativedelta(months=6)
-    elif periodo == "Este ano":
-        data_limite = date(hoje.year, 1, 1)
-    elif periodo == "Ano passado":
-        data_limite = date(hoje.year - 1, 1, 1)
-    else:
-        data_limite = date(2000, 1, 1)  # Tudo
     
-    # Filtra transações
+    # Se for período personalizado, mostra seletores de data
+    if periodo == "Período Personalizado":
+        col_data1, col_data2 = st.columns(2)
+        with col_data1:
+            data_inicio = st.date_input(
+                "Data Início:",
+                value=hoje - relativedelta(months=3),
+                format="DD/MM/YYYY",
+                key="data_inicio_custom"
+            )
+        with col_data2:
+            data_fim = st.date_input(
+                "Data Fim:",
+                value=hoje,
+                format="DD/MM/YYYY",
+                key="data_fim_custom"
+            )
+        
+        # Valida datas
+        if data_inicio > data_fim:
+            st.error("⚠️ Data de início não pode ser maior que data fim!")
+            data_limite = hoje - relativedelta(months=3)
+            data_fim = hoje
+        else:
+            data_limite = data_inicio
+    else:
+        # Períodos predefinidos
+        if periodo == "Últimos 30 dias":
+            data_limite = hoje - timedelta(days=30)
+        elif periodo == "Últimos 3 meses":
+            data_limite = hoje - relativedelta(months=3)
+        elif periodo == "Últimos 6 meses":
+            data_limite = hoje - relativedelta(months=6)
+        elif periodo == "Este ano":
+            data_limite = date(hoje.year, 1, 1)
+        elif periodo == "Ano passado":
+            data_limite = date(hoje.year - 1, 1, 1)
+        else:  # Tudo
+            data_limite = date(2000, 1, 1)
+        
+        data_fim = hoje
+    
+    # Filtra transações (entre data_limite e data_fim)
     todas_transacoes = st.session_state.gerenciador.transacoes
     transacoes = [
         t for t in todas_transacoes 
-        if t.data >= data_limite
+        if data_limite <= t.data <= data_fim
     ]
     
     with col_filtro2:
@@ -359,6 +389,10 @@ with tab_transacoes:
             f"{len(transacoes):,}",
             f"de {len(todas_transacoes):,}"
         )
+        
+        # Mostra o período exato
+        if periodo == "Período Personalizado":
+            st.caption(f"{data_limite.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}")
     
     st.divider()
     
