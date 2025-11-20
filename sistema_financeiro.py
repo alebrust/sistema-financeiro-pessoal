@@ -12,6 +12,9 @@ from pycoingecko import CoinGeckoAPI
 
 
 def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
+    """
+    Converte um valor para um objeto date de forma segura.
+    """
     if isinstance(value, date):
         return value
     if isinstance(value, datetime):
@@ -25,6 +28,9 @@ def parse_date_safe(value: Any, default: Optional[date] = None) -> date:
 
 
 class Transacao:
+    """
+    Representa uma transação financeira.
+    """
     def __init__(
         self,
         id_conta: str,
@@ -46,6 +52,9 @@ class Transacao:
         self.observacao = observacao
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a transação para um dicionário.
+        """
         return {
             "id_transacao": self.id_transacao,
             "id_conta": self.id_conta,
@@ -59,6 +68,9 @@ class Transacao:
 
 
 class Ativo:
+    """
+    Representa um ativo financeiro em uma conta de investimento.
+    """
     def __init__(
         self,
         ticker: str,
@@ -73,9 +85,15 @@ class Ativo:
 
     @property
     def valor_total(self) -> float:
+        """
+        Calcula o valor total do ativo com base na quantidade e preço médio.
+        """
         return self.quantidade * self.preco_medio
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte o ativo para um dicionário.
+        """
         return {
             "ticker": self.ticker,
             "quantidade": self.quantidade,
@@ -85,6 +103,9 @@ class Ativo:
 
 
 class Conta(ABC):
+    """
+    Classe abstrata base para contas financeiras.
+    """
     def __init__(self, nome: str, logo_url: str = "", id_conta: Optional[str] = None):
         self.id_conta = id_conta or str(uuid4())
         self.nome = nome
@@ -92,15 +113,24 @@ class Conta(ABC):
 
     @abstractmethod
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a conta para um dicionário.
+        """
         ...
 
     def editar_nome(self, novo_nome: str) -> bool:
+        """
+        Edita o nome da conta.
+        """
         if novo_nome and novo_nome != self.nome:
             self.nome = novo_nome
             return True
         return False
 
     def editar_logo_url(self, nova_url: str) -> bool:
+        """
+        Edita a URL do logo da conta.
+        """
         if nova_url != self.logo_url:
             self.logo_url = nova_url
             return True
@@ -108,6 +138,9 @@ class Conta(ABC):
 
 
 class ContaCorrente(Conta):
+    """
+    Representa uma conta corrente.
+    """
     def __init__(
         self,
         nome: str,
@@ -121,6 +154,9 @@ class ContaCorrente(Conta):
         self.limite_cheque_especial = float(limite_cheque_especial)
 
     def editar_limite(self, novo: float) -> bool:
+        """
+        Edita o limite do cheque especial da conta.
+        """
         novo = float(novo)
         if novo != self.limite_cheque_especial:
             self.limite_cheque_especial = novo
@@ -128,6 +164,9 @@ class ContaCorrente(Conta):
         return False
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a conta corrente para um dicionário.
+        """
         return {
             "tipo": "ContaCorrente",
             "id_conta": self.id_conta,
@@ -139,6 +178,9 @@ class ContaCorrente(Conta):
 
 
 class ContaInvestimento(Conta):
+    """
+    Representa uma conta de investimento.
+    """
     def __init__(
         self,
         nome: str,
@@ -153,10 +195,16 @@ class ContaInvestimento(Conta):
 
     @property
     def valor_em_ativos(self) -> float:
+        """
+        Calcula o valor total de todos os ativos na conta.
+        """
         return sum(a.valor_total for a in self.ativos)
 
     @property
     def saldo(self) -> float:
+        """
+        Calcula o saldo total da conta (caixa + ativos).
+        """
         return self.saldo_caixa + self.valor_em_ativos
 
     def atualizar_ou_adicionar_ativo(
@@ -166,6 +214,9 @@ class ContaInvestimento(Conta):
         preco_medio: float,
         tipo_ativo: str = "Outro",
     ) -> None:
+        """
+        Atualiza um ativo existente ou adiciona um novo.
+        """
         ticker = ticker.upper()
         for a in self.ativos:
             if a.ticker == ticker and a.tipo_ativo == tipo_ativo:
@@ -181,6 +232,9 @@ class ContaInvestimento(Conta):
         self.ativos.append(Ativo(ticker, quantidade, preco_medio, tipo_ativo))
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a conta de investimento para um dicionário.
+        """
         return {
             "tipo": "ContaInvestimento",
             "id_conta": self.id_conta,
@@ -192,6 +246,9 @@ class ContaInvestimento(Conta):
 
 
 class CartaoCredito:
+    """
+    Representa um cartão de crédito.
+    """
     def __init__(
         self,
         nome: str,
@@ -207,6 +264,9 @@ class CartaoCredito:
         self.dia_vencimento = int(dia_vencimento)
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte o cartão de crédito para um dicionário.
+        """
         return {
             "id_cartao": self.id_cartao,
             "nome": self.nome,
@@ -216,12 +276,18 @@ class CartaoCredito:
         }
 
     def editar_nome(self, novo_nome: str) -> bool:
+        """
+        Edita o nome do cartão.
+        """
         if novo_nome and novo_nome != self.nome:
             self.nome = novo_nome
             return True
         return False
 
     def editar_logo_url(self, nova_url: str) -> bool:
+        """
+        Edita a URL do logo do cartão.
+        """
         if nova_url != self.logo_url:
             self.logo_url = nova_url
             return True
@@ -229,6 +295,9 @@ class CartaoCredito:
 
 
 class CompraCartao:
+    """
+    Representa uma compra feita com cartão de crédito.
+    """
     def __init__(
         self,
         id_cartao: str,
@@ -258,6 +327,9 @@ class CompraCartao:
         self.data_compra_real = data_compra_real or self.data_compra
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a compra de cartão para um dicionário.
+        """
         return {
             "id_compra": self.id_compra,
             "id_cartao": self.id_cartao,
@@ -275,6 +347,9 @@ class CompraCartao:
 
 
 class Fatura:
+    """
+    Representa uma fatura de cartão de crédito.
+    """
     def __init__(
         self,
         id_cartao: str,
@@ -292,6 +367,9 @@ class Fatura:
         self.status = status
 
     def para_dict(self) -> Dict[str, Any]:
+        """
+        Converte a fatura para um dicionário.
+        """
         return {
             "id_fatura": self.id_fatura,
             "id_cartao": self.id_cartao,
@@ -303,10 +381,14 @@ class Fatura:
 
 
 class GerenciadorContas:
+    """
+    Gerencia todas as contas, transações, cartões e faturas.
+    """
     def __init__(self, caminho_arquivo: str = "dados.json"):
         self.caminho_arquivo = caminho_arquivo
         self.contas: List[Conta] = []
         self.transacoes: List[Transacao] = []
+        self._transacoes_dict: Dict[str, Transacao] = {}  # Otimização para lookup O(1)
         self.cartoes_credito: List[CartaoCredito] = []
         self.compras_cartao: List[CompraCartao] = []
         self.faturas: List[Fatura] = []
@@ -333,6 +415,9 @@ class GerenciadorContas:
     # ------------------------
 
     def salvar_dados(self) -> None:
+        """
+        Salva todos os dados em um arquivo JSON.
+        """
         data = {
             "contas": [c.para_dict() for c in self.contas],
             "transacoes": [t.para_dict() for t in self.transacoes],
@@ -345,6 +430,9 @@ class GerenciadorContas:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def carregar_dados(self) -> None:
+        """
+        Carrega todos os dados de um arquivo JSON.
+        """
         if not os.path.exists(self.caminho_arquivo):
             return
         try:
@@ -385,19 +473,20 @@ class GerenciadorContas:
             self.contas.append(conta)
 
         self.transacoes = []
+        self._transacoes_dict = {} # Limpa o dicionário antes de popular
         for t in data.get("transacoes", []):
-            self.transacoes.append(
-                Transacao(
-                    id_conta=t.get("id_conta", ""),
-                    descricao=t.get("descricao", ""),
-                    valor=float(t.get("valor", 0.0)),
-                    tipo=t.get("tipo", "Despesa"),
-                    data_transacao=parse_date_safe(t.get("data"), date.today()),
-                    categoria=t.get("categoria", "Outros"),
-                    observacao=t.get("observacao", ""),
-                    id_transacao=t.get("id_transacao"),
-                )
+            transacao = Transacao(
+                id_conta=t.get("id_conta", ""),
+                descricao=t.get("descricao", ""),
+                valor=float(t.get("valor", 0.0)),
+                tipo=t.get("tipo", "Despesa"),
+                data_transacao=parse_date_safe(t.get("data"), date.today()),
+                categoria=t.get("categoria", "Outros"),
+                observacao=t.get("observacao", ""),
+                id_transacao=t.get("id_transacao"),
             )
+            self.transacoes.append(transacao)
+            self._transacoes_dict[transacao.id_transacao] = transacao # Popula o dicionário
 
         self.cartoes_credito = []
         for cc in data.get("cartoes_credito", []):
@@ -454,6 +543,9 @@ class GerenciadorContas:
     # ------------------------
 
     def _calcular_mes_ano_fatura_aberta(self, cartao: CartaoCredito, data_ref: Optional[date] = None) -> Tuple[int, int]:
+        """
+        Calcula o mês e ano da fatura aberta para um cartão.
+        """
         hoje = data_ref or date.today()
         try:
             fechamento_atual = date(hoje.year, hoje.month, cartao.dia_fechamento)
@@ -475,6 +567,9 @@ class GerenciadorContas:
         return vencimento.year, vencimento.month
 
     def ciclos_abertos_unicos(self, id_cartao: str) -> List[Tuple[int, int]]:
+        """
+        Retorna uma lista de ciclos abertos únicos para um cartão.
+        """
         ciclos = {
             (c.data_compra.year, c.data_compra.month)
             for c in self.compras_cartao
@@ -483,10 +578,16 @@ class GerenciadorContas:
         return sorted(list(ciclos))
 
     def ciclo_aberto_mais_antigo(self, id_cartao: str) -> Optional[Tuple[int, int]]:
+        """
+        Retorna o ciclo aberto mais antigo para um cartão.
+        """
         ciclos = self.ciclos_abertos_unicos(id_cartao)
         return ciclos[0] if ciclos else None
 
     def listar_ciclos_navegacao(self, id_cartao: str, data_ref: Optional[date] = None) -> List[Tuple[int, int]]:
+        """
+        Lista ciclos para navegação na interface do usuário.
+        """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return []
@@ -498,6 +599,9 @@ class GerenciadorContas:
         return base
 
     def obter_lancamentos_do_ciclo(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
+        """
+        Obtém lançamentos de cartão de crédito para um ciclo específico.
+        """
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -505,6 +609,9 @@ class GerenciadorContas:
         ]
 
     def obter_lancamentos_futuros_desde(self, id_cartao: str, ano: int, mes: int) -> List[CompraCartao]:
+        """
+        Obtém lançamentos futuros de cartão de crédito a partir de um ciclo.
+        """
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -516,13 +623,29 @@ class GerenciadorContas:
     # ------------------------
 
     def adicionar_conta(self, conta: Conta) -> None:
+        """
+        Adiciona uma nova conta ao gerenciador.
+        """
         self.contas.append(conta)
 
     def remover_conta(self, id_conta: str) -> bool:
+        """
+        Remove uma conta e todas as suas transações associadas.
+        """
         conta = next((c for c in self.contas if c.id_conta == id_conta), None)
         if not conta:
             return False
-        self.transacoes = [t for t in self.transacoes if t.id_conta != id_conta]
+        
+        # Remove transações da lista e do dicionário
+        transacoes_a_manter = []
+        transacoes_dict_a_manter = {}
+        for t in self.transacoes:
+            if t.id_conta != id_conta:
+                transacoes_a_manter.append(t)
+                transacoes_dict_a_manter[t.id_transacao] = t
+        self.transacoes = transacoes_a_manter
+        self._transacoes_dict = transacoes_dict_a_manter
+
         self.contas = [c for c in self.contas if c.id_conta != id_conta]
         return True
 
@@ -530,8 +653,9 @@ class GerenciadorContas:
         """
         Remove uma transação pelo ID e reverte seus efeitos no saldo da conta.
         Se a transação for uma compra de investimento, reverte proporcionalmente os ativos.
+        Otimizado com lookup O(1) via _transacoes_dict.
         """
-        transacao = next((t for t in self.transacoes if t.id_transacao == id_transacao), None)
+        transacao = self._transacoes_dict.get(id_transacao) # Lookup O(1)
         if not transacao:
             return False
         
@@ -562,7 +686,7 @@ class GerenciadorContas:
                         quantidade_comprada = transacao.valor / ativo.preco_medio
                         ativo.quantidade -= quantidade_comprada
                         
-                        if ativo.quantidade <= 0.000001:
+                        if ativo.quantidade <= 0.000001: # Threshold para evitar resíduos
                             conta.ativos = [a for a in conta.ativos if a.ticker.upper() != ticker_desc.upper()]
                         else:
                             for i, a in enumerate(conta.ativos):
@@ -572,63 +696,49 @@ class GerenciadorContas:
                 
                 conta.saldo_caixa += transacao.valor
         
+        # Remove a transação da lista e do dicionário
         self.transacoes = [t for t in self.transacoes if t.id_transacao != id_transacao]
+        del self._transacoes_dict[id_transacao] # Remove do dicionário
         return True
-
-
 
     def vender_ativo(self, id_conta: str, ticker: str, quantidade: float, preco_venda: float, data_venda: str, observacao: str = "") -> tuple[bool, str]:
         """
         Vende uma quantidade de um ativo e registra a transação com lucro/prejuízo.
-        Retorna (sucesso: bool, mensagem: str)
+        Retorna (sucesso: bool, mensagem: str).
         """
         conta = self.buscar_conta_por_id(id_conta)
         if not conta or not isinstance(conta, ContaInvestimento):
             return False, "Conta de investimento não encontrada."
         
-        # Busca o ativo na conta
         ativo = next((a for a in conta.ativos if a.ticker == ticker), None)
         if not ativo:
             return False, f"Ativo {ticker} não encontrado na conta."
         
-        # Verifica se há quantidade suficiente
         if ativo.quantidade < quantidade:
             return False, f"Quantidade insuficiente. Você tem {ativo.quantidade:.6f} de {ticker}."
         
-        # Calcula o valor da venda
         valor_venda = quantidade * preco_venda
-        
-        # Calcula o custo médio dessa quantidade vendida
         custo_medio = quantidade * ativo.preco_medio
-        
-        # Calcula o lucro/prejuízo
         lucro_prejuizo = valor_venda - custo_medio
         lucro_prejuizo_pct = (lucro_prejuizo / custo_medio * 100) if custo_medio > 0 else 0
         
-        # Monta a descrição com P/L
         if lucro_prejuizo >= 0:
             descricao = f"Venda de {ticker} | Lucro: R$ {lucro_prejuizo:.2f} ({lucro_prejuizo_pct:+.2f}%)"
         else:
             descricao = f"Venda de {ticker} | Prejuízo: R$ {abs(lucro_prejuizo):.2f} ({lucro_prejuizo_pct:.2f}%)"
         
-        # Adiciona observação se fornecida
         if observacao:
             descricao += f" | {observacao}"
         
-        # Remove a quantidade do ativo
         ativo.quantidade -= quantidade
         
-        # Se zerou, remove o ativo da lista
         if ativo.quantidade <= 0:
             conta.ativos = [a for a in conta.ativos if a.ticker != ticker]
         
-        # Adiciona o valor da venda ao saldo em caixa
         conta.saldo_caixa += valor_venda
         
-        # Converte a string de data para objeto date
         data_venda_obj = datetime.strptime(data_venda, "%Y-%m-%d").date()
         
-        # Registra a transação de venda com a ordem correta de parâmetros
         nova_transacao = Transacao(
             id_conta=id_conta,
             descricao=descricao,
@@ -638,10 +748,14 @@ class GerenciadorContas:
             categoria="Venda de Investimento",
         )
         self.transacoes.append(nova_transacao)
+        self._transacoes_dict[nova_transacao.id_transacao] = nova_transacao # Adiciona ao dicionário
         
         return True, f"Venda registrada com sucesso! {descricao}"
 
     def buscar_conta_por_id(self, id_conta: str) -> Optional[Conta]:
+        """
+        Busca uma conta pelo seu ID.
+        """
         return next((c for c in self.contas if c.id_conta == id_conta), None)
 
     def registrar_transacao(
@@ -654,6 +768,9 @@ class GerenciadorContas:
         categoria: str,
         observacao: str = "",
     ) -> bool:
+        """
+        Registra uma nova transação e atualiza o saldo da conta.
+        """
         conta = self.buscar_conta_por_id(id_conta)
         if not conta:
             return False
@@ -673,20 +790,23 @@ class GerenciadorContas:
                     return False
                 conta.saldo_caixa -= float(valor)
 
-        self.transacoes.append(
-            Transacao(
-                id_conta=id_conta,
-                descricao=descricao,
-                valor=float(valor),
-                tipo=tipo,
-                data_transacao=data_transacao,
-                categoria=categoria,
-                observacao=observacao,
-            )
+        nova_transacao = Transacao(
+            id_conta=id_conta,
+            descricao=descricao,
+            valor=float(valor),
+            tipo=tipo,
+            data_transacao=data_transacao,
+            categoria=categoria,
+            observacao=observacao,
         )
+        self.transacoes.append(nova_transacao)
+        self._transacoes_dict[nova_transacao.id_transacao] = nova_transacao # Adiciona ao dicionário
         return True
 
     def realizar_transferencia(self, id_origem: str, id_destino: str, valor: float) -> bool:
+        """
+        Realiza uma transferência entre duas contas.
+        """
         if id_origem == id_destino:
             return False
         valor = float(valor)
@@ -710,26 +830,27 @@ class GerenciadorContas:
             conta_destino.saldo_caixa += valor
 
         hoje = date.today()
-        self.transacoes.append(
-            Transacao(
-                id_conta=id_origem,
-                descricao=f"Transferência para {conta_destino.nome}",
-                valor=valor,
-                tipo="Despesa",
-                data_transacao=hoje,
-                categoria="Transferência",
-            )
+        transacao_origem = Transacao(
+            id_conta=id_origem,
+            descricao=f"Transferência para {conta_destino.nome}",
+            valor=valor,
+            tipo="Despesa",
+            data_transacao=hoje,
+            categoria="Transferência",
         )
-        self.transacoes.append(
-            Transacao(
-                id_conta=id_destino,
-                descricao=f"Transferência de {conta_origem.nome}",
-                valor=valor,
-                tipo="Receita",
-                data_transacao=hoje,
-                categoria="Transferência",
-            )
+        self.transacoes.append(transacao_origem)
+        self._transacoes_dict[transacao_origem.id_transacao] = transacao_origem # Adiciona ao dicionário
+
+        transacao_destino = Transacao(
+            id_conta=id_destino,
+            descricao=f"Transferência de {conta_origem.nome}",
+            valor=valor,
+            tipo="Receita",
+            data_transacao=hoje,
+            categoria="Transferência",
         )
+        self.transacoes.append(transacao_destino)
+        self._transacoes_dict[transacao_destino.id_transacao] = transacao_destino # Adiciona ao dicionário
         return True
 
     def comprar_ativo(
@@ -741,6 +862,9 @@ class GerenciadorContas:
         tipo_ativo: str,
         data_compra: date,
     ) -> bool:
+        """
+        Registra a compra de um ativo em uma conta de investimento.
+        """
         conta = self.buscar_conta_por_id(id_conta_destino)
         if not conta or not isinstance(conta, ContaInvestimento):
             return False
@@ -754,16 +878,16 @@ class GerenciadorContas:
             preco_medio=float(preco_unitario),
             tipo_ativo=tipo_ativo,
         )
-        self.transacoes.append(
-            Transacao(
-                id_conta=conta.id_conta,
-                descricao=f"Compra de {ticker}",
-                valor=custo,
-                tipo="Despesa",
-                data_transacao=data_compra,
-                categoria="Investimentos",
-            )
+        nova_transacao = Transacao(
+            id_conta=conta.id_conta,
+            descricao=f"Compra de {ticker}",
+            valor=custo,
+            tipo="Despesa",
+            data_transacao=data_compra,
+            categoria="Investimentos",
         )
+        self.transacoes.append(nova_transacao)
+        self._transacoes_dict[nova_transacao.id_transacao] = nova_transacao # Adiciona ao dicionário
         return True
 
     # ------------------------
@@ -771,6 +895,9 @@ class GerenciadorContas:
     # ------------------------
 
     def _agora_epoch(self) -> float:
+        """
+        Retorna o timestamp Unix atual.
+        """
         return time.time()
 
     def _obter_coingecko_id(self, ticker: str) -> Optional[str]:
@@ -780,31 +907,15 @@ class GerenciadorContas:
         """
         ticker_upper = ticker.upper().strip()
         
-        # Cache para evitar múltiplas consultas
         if ticker_upper in self._cg_cache_ids:
             return self._cg_cache_ids[ticker_upper]
         
-        # Mapeamento manual dos mais populares (performance)
         mapeamento_comum = {
-            "BTC": "bitcoin",
-            "ETH": "ethereum",
-            "BNB": "binancecoin",
-            "XRP": "ripple",
-            "ADA": "cardano",
-            "DOGE": "dogecoin",
-            "SOL": "solana",
-            "DOT": "polkadot",
-            "MATIC": "matic-network",
-            "SHIB": "shiba-inu",
-            "PEPE": "pepe",
-            "AVAX": "avalanche-2",
-            "LINK": "chainlink",
-            "UNI": "uniswap",
-            "LTC": "litecoin",
-            "ATOM": "cosmos",
-            "XLM": "stellar",
-            "USDT": "tether",
-            "USDC": "usd-coin",
+            "BTC": "bitcoin", "ETH": "ethereum", "BNB": "binancecoin", "XRP": "ripple",
+            "ADA": "cardano", "DOGE": "dogecoin", "SOL": "solana", "DOT": "polkadot",
+            "MATIC": "matic-network", "SHIB": "shiba-inu", "PEPE": "pepe", "AVAX": "avalanche-2",
+            "LINK": "chainlink", "UNI": "uniswap", "LTC": "litecoin", "ATOM": "cosmos",
+            "XLM": "stellar", "USDT": "tether", "USDC": "usd-coin",
         }
         
         if ticker_upper in mapeamento_comum:
@@ -812,7 +923,6 @@ class GerenciadorContas:
             self._cg_cache_ids[ticker_upper] = coin_id
             return coin_id
         
-        # Busca dinâmica (fallback para criptos não mapeadas)
         try:
             lista = self._cg.get_coins_list()
             ticker_lower = ticker.lower()
@@ -962,49 +1072,23 @@ class GerenciadorContas:
             return None
             
     def _normalizar_ticker(self, ticker: str, tipo_ativo: str) -> str:
+        """
+        Normaliza o ticker para o formato esperado pelas APIs (ex: .SA para B3, -USD para cripto).
+        """
         t = (ticker or "").upper().strip()
         if tipo_ativo in ("Ação BR", "FII"):
             if not t.endswith(".SA"):
                 t = f"{t}.SA"
         elif tipo_ativo == "Cripto":
+            # Cripto já é tratado pelo CoinGecko, mas yfinance pode precisar disso
             if not t.endswith("-USD"):
                 t = f"{t}-USD"
         return t
 
     def _obter_preco_yf(self, symbol: str) -> float:
-        tk = yf.Ticker(symbol)
-
-        try:
-            fi = getattr(tk, "fast_info", None)
-            if fi:
-                last = fi.get("last_price") or fi.get("lastPrice")
-                if last is None:
-                    last = fi.get("last_price")
-                if last is not None and float(last) > 0:
-                    return float(last)
-        except Exception:
-            pass
-
-        try:
-            hist = tk.history(period="1d")
-            if hist is not None and not hist.empty:
-                last = hist["Close"].iloc[-1]
-                if last is not None and float(last) > 0:
-                    return float(last)
-        except Exception:
-            pass
-
-        try:
-            info = tk.info or {}
-            last = info.get("regularMarketPrice")
-            if last is not None and float(last) > 0:
-                return float(last)
-        except Exception:
-            pass
-
-        raise ValueError(f"Cotação indisponível para {symbol}")
-
-    def _obter_preco_yf(self, symbol: str) -> float:
+        """
+        Busca o preço de um ativo via yfinance.
+        """
         tk = yf.Ticker(symbol)
 
         try:
@@ -1046,95 +1130,41 @@ class GerenciadorContas:
         - Ações BR/FII: usa yfinance
         """
         try:
-            # Tesouro Direto - API oficial
-            if tipo_ativo == "Tesouro Direto":
-                cache_key = f"TD_{ticker.upper()}"
-                now = self._agora_epoch()
-                cached = self._cotacoes_cache.get(cache_key)
-                if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
-                    return cached.get("preco")
-                
-                preco = self._obter_preco_tesouro(ticker)
-                if preco:
-                    self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
-                return preco
-            
-            # Criptomoedas - CoinGecko
-            if tipo_ativo == "Cripto":
-                cache_key = f"CG_{ticker.upper()}"
-                now = self._agora_epoch()
-                cached = self._cotacoes_cache.get(cache_key)
-                if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
-                    return cached.get("preco")
-                
-                try:
-                    preco = self._obter_preco_coingecko(ticker)
-                    self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
-                    return preco
-                except Exception:
-                    return None
-            
-            # Ações e FIIs - yfinance (com normalização)
-            symbol = self._normalizar_ticker(ticker, tipo_ativo)
+            cache_key = f"{tipo_ativo}_{ticker.upper()}"
             now = self._agora_epoch()
-            cached = self._cotacoes_cache.get(symbol)
+            cached = self._cotacoes_cache.get(cache_key)
             if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
                 return cached.get("preco")
-
-            try:
+            
+            preco = None
+            if tipo_ativo == "Tesouro Direto":
+                preco = self._obter_preco_tesouro(ticker)
+            elif tipo_ativo == "Cripto":
+                preco = self._obter_preco_coingecko(ticker)
+            else: # Ação BR, FII, Ação EUA
+                symbol = self._normalizar_ticker(ticker, tipo_ativo)
                 preco = self._obter_preco_yf(symbol)
-                self._cotacoes_cache[symbol] = {"preco": preco, "ts": now}
-                return preco
-            except Exception:
-                return None
+            
+            if preco:
+                self._cotacoes_cache[cache_key] = {"preco": preco, "ts": now}
+            return preco
         
-        except Exception as e:
-            print(f"Erro ao obter preço de {ticker} ({tipo_ativo}): {e}")
+        except Exception:
             return None
     
-    def _obter_preco_atual_seguro(self, ticker: str) -> float:
-        # Obtém o preço atual do ticker com cache. Fallback via yfinance; retorna 0.0 em erro.
-        try:
-            if not hasattr(self, "_cotacoes_cache"):
-                self._cotacoes_cache = {}
-
-            cache_key = f"TICKER_{ticker}"
-            if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
-                return float(self._cotacoes_cache[cache_key])
-
-            preco = None
-
-            # Se existir método oficial no backend, use-o
-            if hasattr(self, "obter_preco_atual") and callable(getattr(self, "obter_preco_atual")):
-                try:
-                    preco = float(self.obter_preco_atual(ticker))
-                except Exception:
-                    preco = None
-
-            # Fallback via yfinance
-            if preco is None:
-                tk = yf.Ticker(ticker)
-                preco = tk.info.get("regularMarketPrice") or tk.info.get("previousClose")
-                if preco is None:
-                    hist = tk.history(period="5d", interval="1d")
-                    if not hist.empty:
-                        preco = float(hist["Close"].dropna().iloc[-1])
-
-            preco_val = float(preco) if preco is not None else 0.0
-            self._cotacoes_cache[cache_key] = preco_val
-            return preco_val
-        except Exception:
-            return 0.0
-
     def _obter_fx_usd_brl(self) -> float:
-        # Retorna o câmbio USD/BRL com cache (USDBRL=X). Fallback seguro: 1.0
+        """
+        Retorna o câmbio USD/BRL com cache. Fallback seguro: 1.0.
+        """
         try:
             if not hasattr(self, "_cotacoes_cache"):
                 self._cotacoes_cache = {}
 
             cache_key = "FX_USDBRL"
-            if cache_key in self._cotacoes_cache and self._cotacoes_cache[cache_key] is not None:
-                return float(self._cotacoes_cache[cache_key])
+            now = self._agora_epoch()
+            cached = self._cotacoes_cache.get(cache_key)
+            if cached and (now - cached.get("ts", 0) <= self._cotacoes_ttl):
+                return cached.get("preco")
 
             ticker_fx = yf.Ticker("USDBRL=X")
             fx = ticker_fx.info.get("regularMarketPrice") or ticker_fx.info.get("previousClose")
@@ -1142,16 +1172,16 @@ class GerenciadorContas:
                 hist = ticker_fx.history(period="5d", interval="1d")
                 fx = float(hist["Close"].dropna().iloc[-1]) if not hist.empty else None
 
-            fx_val = float(fx) if fx is not None else None
-            self._cotacoes_cache[cache_key] = fx_val
-            return fx_val if fx_val is not None else 1.0
+            fx_val = float(fx) if fx is not None else 1.0 # Default para 1.0 se não encontrar
+            self._cotacoes_cache[cache_key] = {"preco": fx_val, "ts": now}
+            return fx_val
         except Exception:
             return 1.0
 
     def calcular_posicao_conta_investimento(self, conta_id: str) -> dict:
         """
-        Calcula posição em BRL, convertendo USD→BRL quando necessário.
-        Suporta: Ação BR, Ação EUA, FII, Cripto, Tesouro Direto.
+        Calcula a posição atual de uma conta de investimento em BRL.
+        Converte USD→BRL quando necessário para ativos estrangeiros.
         """
         conta = None
         for c in getattr(self, "contas", []):
@@ -1178,31 +1208,17 @@ class GerenciadorContas:
                 quantidade = float(getattr(ativo, "quantidade", 0.0) or 0.0)
                 preco_medio_brl = float(getattr(ativo, "preco_medio", 0.0) or 0.0)
 
-                preco_atual_brl = None
+                preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
                 
-                if tipo_ativo == "Tesouro Direto":
-                    preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
-                    if preco_atual_brl is None:
-                        preco_atual_brl = preco_medio_brl
-                
-                elif tipo_ativo == "Cripto":
-                    preco_atual_brl = self.obter_preco_atual(ticker, tipo_ativo)
-                    if preco_atual_brl is None:
-                        preco_atual_brl = preco_medio_brl
-                
-                else:
-                    symbol = self._normalizar_ticker(ticker, tipo_ativo)
-                    preco_atual_raw = self._obter_preco_atual_seguro(symbol)
-                    
-                    preco_atual_brl = float(preco_atual_raw or 0.0)
-                    
-                    if tipo_ativo == "Ação EUA" and preco_atual_brl > 0:
-                        fx = self._obter_fx_usd_brl()
-                        preco_atual_brl = float(preco_atual_raw) * float(fx)
-                    
-                    if preco_atual_brl == 0.0:
-                        preco_atual_brl = preco_medio_brl
+                # Se não conseguiu obter preço, usa o preço médio
+                if preco_atual_brl is None or preco_atual_brl == 0.0:
+                    preco_atual_brl = preco_medio_brl
 
+                # Converte USD→BRL se for "Ação EUA" (o preco_atual_brl já está em USD neste ponto)
+                if tipo_ativo == "Ação EUA" and preco_atual_brl > 0:
+                    fx = self._obter_fx_usd_brl()
+                    preco_atual_brl = preco_atual_brl * fx
+                
                 valor_atual = quantidade * preco_atual_brl
                 custo_total = quantidade * preco_medio_brl
                 pl_reais = valor_atual - custo_total
@@ -1222,6 +1238,7 @@ class GerenciadorContas:
                 total_valor_atual_ativos += valor_atual
 
             except Exception:
+                # Ignora ativo problemático e continua
                 continue
 
         patrimonio_atualizado = saldo_caixa + total_valor_atual_ativos
@@ -1239,12 +1256,21 @@ class GerenciadorContas:
     # ------------------------
 
     def buscar_cartao_por_id(self, id_cartao: str) -> Optional[CartaoCredito]:
+        """
+        Busca um cartão de crédito pelo seu ID.
+        """
         return next((c for c in self.cartoes_credito if c.id_cartao == id_cartao), None)
 
     def adicionar_cartao_credito(self, cartao: CartaoCredito) -> None:
+        """
+        Adiciona um novo cartão de crédito.
+        """
         self.cartoes_credito.append(cartao)
 
     def remover_cartao_credito(self, id_cartao: str) -> bool:
+        """
+        Remove um cartão de crédito e todas as suas compras e faturas associadas.
+        """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return False
@@ -1254,6 +1280,9 @@ class GerenciadorContas:
         return True
 
     def obter_compras_fatura_aberta(self, id_cartao: str) -> List[CompraCartao]:
+        """
+        Obtém todas as compras de um cartão que ainda não foram fechadas em uma fatura.
+        """
         return [
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
@@ -1269,6 +1298,9 @@ class GerenciadorContas:
         num_parcelas: int = 1,
         observacao: str = "",
     ) -> bool:
+        """
+        Registra uma compra no cartão de crédito, gerando parcelas se necessário.
+        """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return False
@@ -1313,6 +1345,9 @@ class GerenciadorContas:
         return True
 
     def remover_compra_cartao(self, id_compra_original: str) -> None:
+        """
+        Remove todas as parcelas de uma compra de cartão de crédito.
+        """
         self.compras_cartao = [
             c for c in self.compras_cartao if c.id_compra_original != id_compra_original
         ]
@@ -1323,6 +1358,9 @@ class GerenciadorContas:
         data_fechamento_real: date,
         data_vencimento_real: date,
     ) -> Optional[Fatura]:
+        """
+        Fecha uma fatura de cartão de crédito, agrupando as compras elegíveis.
+        """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return None
@@ -1354,6 +1392,9 @@ class GerenciadorContas:
         return fatura
 
     def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
+        """
+        Registra o pagamento de uma fatura de cartão de crédito.
+        """
         fatura = next((f for f in self.faturas if f.id_fatura == id_fatura), None)
         if not fatura or fatura.status == "Paga":
             return False
@@ -1368,22 +1409,28 @@ class GerenciadorContas:
         conta.saldo -= valor
         fatura.status = "Paga"
 
-        self.transacoes.append(
-            Transacao(
-                id_conta=conta.id_conta,
-                descricao=f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}",
-                valor=valor,
-                tipo="Despesa",
-                data_transacao=data_pagamento,
-                categoria="Cartão de Crédito",
-            )
+        nova_transacao = Transacao(
+            id_conta=conta.id_conta,
+            descricao=f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}",
+            valor=valor,
+            tipo="Despesa",
+            data_transacao=data_pagamento,
+            categoria="Cartão de Crédito",
         )
+        self.transacoes.append(nova_transacao)
+        self._transacoes_dict[nova_transacao.id_transacao] = nova_transacao # Adiciona ao dicionário
         return True
 
     def adicionar_categoria(self, nome: str) -> None:
+        """
+        Adiciona uma nova categoria de transação.
+        """
         nome = (nome or "").strip()
         if nome and nome not in self.categorias:
             self.categorias.append(nome)
 
     def remover_categoria(self, nome: str) -> None:
+        """
+        Remove uma categoria de transação.
+        """
         self.categorias = [c for c in self.categorias if c != nome]
