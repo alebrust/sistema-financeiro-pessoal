@@ -315,10 +315,60 @@ with tab_dashboard:
 # --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
-    transacoes = st.session_state.gerenciador.transacoes
-    if not transacoes:
-        st.info("Nenhuma transação registrada ainda.")
+    
+    # === FILTROS ===
+    from datetime import timedelta
+    from dateutil.relativedelta import relativedelta
+    
+    col_filtro1, col_filtro2 = st.columns([3, 2])
+    
+    with col_filtro1:
+        periodo = st.selectbox(
+            "📅 Filtrar por Período:",
+            ["Últimos 30 dias", "Últimos 3 meses", "Últimos 6 meses", 
+             "Este ano", "Ano passado", "Tudo"],
+            index=1,  # Padrão: últimos 3 meses
+            key="filtro_periodo_transacoes"
+        )
+    
+    # Calcula data limite
+    hoje = date.today()
+    if periodo == "Últimos 30 dias":
+        data_limite = hoje - timedelta(days=30)
+    elif periodo == "Últimos 3 meses":
+        data_limite = hoje - relativedelta(months=3)
+    elif periodo == "Últimos 6 meses":
+        data_limite = hoje - relativedelta(months=6)
+    elif periodo == "Este ano":
+        data_limite = date(hoje.year, 1, 1)
+    elif periodo == "Ano passado":
+        data_limite = date(hoje.year - 1, 1, 1)
     else:
+        data_limite = date(2000, 1, 1)  # Tudo
+    
+    # Filtra transações
+    todas_transacoes = st.session_state.gerenciador.transacoes
+    transacoes = [
+        t for t in todas_transacoes 
+        if t.data >= data_limite
+    ]
+    
+    with col_filtro2:
+        st.metric(
+            "📊 Exibindo", 
+            f"{len(transacoes):,}",
+            f"de {len(todas_transacoes):,}"
+        )
+    
+    st.divider()
+    
+    # === RESTO DO CÓDIGO (não muda) ===
+    if not transacoes:
+        st.info("Nenhuma transação registrada para o período selecionado.")
+    else:
+        mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
+        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
+        # ... resto permanece igual
         mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
         col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
         col_data.write("Data")
