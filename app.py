@@ -10,7 +10,6 @@ from sistema_financeiro import (
     Ativo, # Importar Ativo para reconstruir objetos na venda
 )
 import pandas as pd
-import plotly.express as px # Importado mas não usado no código fornecido
 import calendar
 
 # --- Configurações Iniciais ---
