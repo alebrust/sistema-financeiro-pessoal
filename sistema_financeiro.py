@@ -1348,6 +1348,60 @@ class GerenciadorContas:
         )
         return True
 
+      def reabrir_fatura(self, id_fatura: str) -> bool:
+        """
+        Reabre uma fatura fechada, voltando as compras para status 'em aberto'
+        e estornando o pagamento se já foi pago.
+        
+        Args:
+            id_fatura: ID da fatura a ser reaberta
+            
+        Returns:
+            bool: True se sucesso, False caso contrário
+        """
+        # Busca a fatura
+        fatura = None
+        for f in self.faturas:
+            if f.id_fatura == id_fatura:
+                fatura = f
+                break
+        
+        if not fatura:
+            return False
+        
+        # Se a fatura foi paga, estorna o pagamento
+        if fatura.status == "Paga":
+            # Busca a transação de pagamento
+            transacao_pagamento = None
+            for t in self.transacoes:
+                if (t.categoria == "Pagamento de Fatura" and 
+                    f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}" in t.descricao):
+                    # Verifica se é do cartão correto
+                    cartao = self.buscar_cartao_por_id(fatura.id_cartao)
+                    if cartao and cartao.nome in t.descricao:
+                        transacao_pagamento = t
+                        break
+            
+            # Estorna o valor na conta
+            if transacao_pagamento:
+                conta = self.buscar_conta_por_id(transacao_pagamento.id_conta)
+                if conta and isinstance(conta, ContaCorrente):
+                    # Devolve o dinheiro (era despesa, agora estorna)
+                    conta.saldo += transacao_pagamento.valor
+                    
+                    # Remove a transação de pagamento
+                    self.transacoes.remove(transacao_pagamento)
+        
+        # Volta as compras para "em aberto" (remove id_fatura)
+        compras_da_fatura = [c for c in self.compras_cartao if c.id_fatura == id_fatura]
+        for compra in compras_da_fatura:
+            compra.id_fatura = None
+        
+        # Remove a fatura
+        self.faturas.remove(fatura)
+        
+        return True     
+
     def adicionar_categoria(self, nome: str) -> None:
         nome = (nome or "").strip()
         if nome and nome not in self.categorias:
