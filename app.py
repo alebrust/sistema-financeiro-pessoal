@@ -16,7 +16,7 @@ def formatar_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-st.set_page_config(page_title="Brust Personal Finance", page_icon="💰", layout="wide")
+st.set_page_config(page_title="BRUST Personal Finance", page_icon="💰", layout="wide")
 
 if "gerenciador" not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
@@ -33,7 +33,7 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.title("Brust Personal Finance 💰")
+st.title("BRUST Personal Finance 💰")
 
 tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
     ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
