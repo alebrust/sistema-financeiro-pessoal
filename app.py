@@ -26,6 +26,7 @@ for key, default in [
     ("conta_para_excluir", None),
     ("compra_para_excluir", None),
     ("fatura_para_pagar", None),
+    ("fatura_para_reabrir", None),
     ("cartao_para_excluir", None),
     ("categoria_para_excluir", None),
    ]:
