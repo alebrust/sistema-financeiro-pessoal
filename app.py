@@ -920,36 +920,36 @@ with tab_cartoes:
                                             st.write(compra.observacao)
 
                         with tab_fechadas:
-    if not faturas_fechadas:
-        st.info("Nenhuma fatura fechada para este cartão.")
-    else:
-        for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
-            fatura_col1, fatura_col2 = st.columns([3, 1])
-            cor = "green" if fatura.status == "Paga" else "red"
-            fatura_col1.metric(
-                f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", 
-                formatar_moeda(fatura.valor_total)
-            )
-            fatura_col1.caption(
-                f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]"
-            )
-
-            with st.expander("Ver Lançamentos"):
-                lancamentos_fatura = [
-                    c for c in st.session_state.gerenciador.compras_cartao 
-                    if c.id_fatura == fatura.id_fatura
-                ]
-                if not lancamentos_fatura:
-                    st.caption("Nenhum lançamento encontrado para esta fatura.")
-                else:
-                    for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
-                        venc_str = lanc.data_compra.strftime("%d/%m/%Y")
-                        real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
-                        st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
-
-                        if getattr(lanc, "observacao", None):
-                            with st.expander("Observação", expanded=False):
-                                st.write(lanc.observacao)
+                            if not faturas_fechadas:
+                                st.info("Nenhuma fatura fechada para este cartão.")
+                            else:
+                                for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
+                                    fatura_col1, fatura_col2 = st.columns([3, 1])
+                                    cor = "green" if fatura.status == "Paga" else "red"
+                                    fatura_col1.metric(
+                                        f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", 
+                                        formatar_moeda(fatura.valor_total)
+                                    )
+                                    fatura_col1.caption(
+                                        f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]"
+                                    )
+                        
+                                    with st.expander("Ver Lançamentos"):
+                                        lancamentos_fatura = [
+                                            c for c in st.session_state.gerenciador.compras_cartao 
+                                            if c.id_fatura == fatura.id_fatura
+                                        ]
+                                        if not lancamentos_fatura:
+                                            st.caption("Nenhum lançamento encontrado para esta fatura.")
+                                        else:
+                                            for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
+                                                venc_str = lanc.data_compra.strftime("%d/%m/%Y")
+                                                real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
+                                                st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
+                        
+                                                if getattr(lanc, "observacao", None):
+                                                    with st.expander("Observação", expanded=False):
+                                                        st.write(lanc.observacao)
 
             # === BOTÕES DE AÇÃO ===
             if fatura.status == "Fechada":
