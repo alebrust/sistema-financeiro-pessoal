@@ -16,7 +16,7 @@ def formatar_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-st.set_page_config(page_title="Meu Sistema Financeiro", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Brust Personal Finance", page_icon="💰", layout="wide")
 
 if "gerenciador" not in st.session_state:
     st.session_state.gerenciador = GerenciadorContas("dados_v15.json")
@@ -32,7 +32,7 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.title("Meu Sistema de Gestão Financeira Pessoal 💰")
+st.title("Brust Personal Finance 💰")
 
 tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
     ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
@@ -213,7 +213,7 @@ with tab_dashboard:
             # --------------------------
             # Resumo (com valor atual de investimentos)
             # --------------------------
-            st.header("Resumo Financeiro")
+            st.header("Resumo ")
             todas_as_contas = st.session_state.gerenciador.contas
             if todas_as_contas:
                 saldos_agrupados = defaultdict(float)
@@ -919,73 +919,130 @@ with tab_cartoes:
                                             st.write(compra.observacao)
 
                         with tab_fechadas:
-                            if not faturas_fechadas:
-                                st.info("Nenhuma fatura fechada para este cartão.")
-                            else:
-                                for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
-                                    fatura_col1, fatura_col2 = st.columns([3, 1])
-                                    cor = "green" if fatura.status == "Paga" else "red"
-                                    fatura_col1.metric(f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", formatar_moeda(fatura.valor_total))
-                                    fatura_col1.caption(f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]")
+    if not faturas_fechadas:
+        st.info("Nenhuma fatura fechada para este cartão.")
+    else:
+        for fatura in sorted(faturas_fechadas, key=lambda f: f.data_vencimento, reverse=True):
+            fatura_col1, fatura_col2 = st.columns([3, 1])
+            cor = "green" if fatura.status == "Paga" else "red"
+            fatura_col1.metric(
+                f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}", 
+                formatar_moeda(fatura.valor_total)
+            )
+            fatura_col1.caption(
+                f"Vencimento: {fatura.data_vencimento.strftime('%d/%m/%Y')} - Status: :{cor}[{fatura.status}]"
+            )
 
-                                    with st.expander("Ver Lançamentos"):
-                                        lancamentos_fatura = [
-                                            c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura
-                                        ]
-                                        if not lancamentos_fatura:
-                                            st.caption("Nenhum lançamento encontrado para esta fatura.")
-                                        else:
-                                            for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
-                                                venc_str = lanc.data_compra.strftime("%d/%m/%Y")
-                                                real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
-                                                st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
+            with st.expander("Ver Lançamentos"):
+                lancamentos_fatura = [
+                    c for c in st.session_state.gerenciador.compras_cartao 
+                    if c.id_fatura == fatura.id_fatura
+                ]
+                if not lancamentos_fatura:
+                    st.caption("Nenhum lançamento encontrado para esta fatura.")
+                else:
+                    for lanc in sorted(lancamentos_fatura, key=lambda l: l.data_compra):
+                        venc_str = lanc.data_compra.strftime("%d/%m/%Y")
+                        real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
+                        st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
 
-                                                if getattr(lanc, "observacao", None):
-                                                    with st.expander("Observação", expanded=False):
-                                                        st.write(lanc.observacao)
+                        if getattr(lanc, "observacao", None):
+                            with st.expander("Observação", expanded=False):
+                                st.write(lanc.observacao)
 
-                                    if fatura.status == "Fechada":
-                                        with st.text(""):
-                                            pass
-                                        with fatura_col2:
-                                            if st.button("Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}"):
-                                                st.session_state.fatura_para_pagar = fatura.id_fatura
-                                                st.rerun()
-                                    else:
-                                        fatura_col2.success("Paga")
+            # === BOTÕES DE AÇÃO ===
+            if fatura.status == "Fechada":
+                # Fatura fechada mas não paga
+                col_btn1, col_btn2 = st.columns(2)
+                
+                with col_btn1:
+                    if st.button("💰 Pagar Fatura", key=f"pay_bill_{fatura.id_fatura}", use_container_width=True):
+                        st.session_state.fatura_para_pagar = fatura.id_fatura
+                        st.rerun()
+                
+                with col_btn2:
+                    if st.button("🔓 Reabrir Fatura", key=f"reopen_bill_{fatura.id_fatura}", type="secondary", use_container_width=True):
+                        st.session_state.fatura_para_reabrir = fatura.id_fatura
+                        st.rerun()
+            
+            else:
+                # Fatura paga
+                col_btn1, col_btn2 = st.columns(2)
+                
+                with col_btn1:
+                    fatura_col2.success("✅ Paga")
+                
+                with col_btn2:
+                    if st.button("🔓 Reabrir Fatura", key=f"reopen_paid_bill_{fatura.id_fatura}", type="secondary", use_container_width=True, help="Estorna o pagamento e reabre a fatura"):
+                        st.session_state.fatura_para_reabrir = fatura.id_fatura
+                        st.rerun()
 
-                                    if st.session_state.fatura_para_pagar == fatura.id_fatura:
-                                        with st.form(f"pay_bill_form_{fatura.id_fatura}"):
-                                            st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
-                                            contas_correntes_pagamento = [
-                                                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
-                                            ]
-                                            # Por ID, exibindo apenas nome
-                                            mapa_cc_pag = {c.id_conta: c for c in contas_correntes_pagamento}
-                                            ids_cc_pag = list(mapa_cc_pag.keys())
+            # === CONFIRMAÇÃO DE PAGAMENTO ===
+            if st.session_state.fatura_para_pagar == fatura.id_fatura:
+                with st.form(f"pay_bill_form_{fatura.id_fatura}"):
+                    st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
+                    contas_correntes_pagamento = [
+                        c for c in st.session_state.gerenciador.contas 
+                        if isinstance(c, ContaCorrente)
+                    ]
+                    mapa_cc_pag = {c.id_conta: c for c in contas_correntes_pagamento}
+                    ids_cc_pag = list(mapa_cc_pag.keys())
 
-                                            conta_pagamento_id = st.selectbox(
-                                                "Pagar com a conta:",
-                                                options=ids_cc_pag,
-                                                format_func=lambda cid: mapa_cc_pag[cid].nome,
-                                                key=f"pay_fatura_conta_id_{fatura.id_fatura}"
-                                            )
-                                            data_pagamento = st.date_input("Data do Pagamento", value=date.today(), format="DD/MM/YYYY")
-                                            if st.form_submit_button("Confirmar Pagamento"):
-                                                sucesso = st.session_state.gerenciador.pagar_fatura(
-                                                    fatura.id_fatura, conta_pagamento_id, data_pagamento
-                                                )
-                                                if sucesso:
-                                                    st.session_state.gerenciador.salvar_dados()
-                                                    st.toast("Fatura paga com sucesso!")
-                                                    st.session_state.fatura_para_pagar = None
-                                                    st.rerun()
-                                                else:
-                                                    st.error("Pagamento falhou. Saldo insuficiente.")
-                                        if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
-                                            st.session_state.fatura_para_pagar = None
-                                            st.rerun()
-
+                    conta_pagamento_id = st.selectbox(
+                        "Pagar com a conta:",
+                        options=ids_cc_pag,
+                        format_func=lambda cid: mapa_cc_pag[cid].nome,
+                        key=f"pay_fatura_conta_id_{fatura.id_fatura}"
+                    )
+                    data_pagamento = st.date_input(
+                        "Data do Pagamento", 
+                        value=date.today(), 
+                        format="DD/MM/YYYY"
+                    )
+                    if st.form_submit_button("Confirmar Pagamento"):
+                        sucesso = st.session_state.gerenciador.pagar_fatura(
+                            fatura.id_fatura, conta_pagamento_id, data_pagamento
+                        )
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast("Fatura paga com sucesso!")
+                            st.session_state.fatura_para_pagar = None
+                            st.rerun()
+                        else:
+                            st.error("Pagamento falhou. Saldo insuficiente.")
+                
+                if st.button("Cancelar Pagamento", key=f"cancel_pay_{fatura.id_fatura}"):
+                    st.session_state.fatura_para_pagar = None
+                    st.rerun()
+            
+            # === CONFIRMAÇÃO DE REABERTURA ===
+            if st.session_state.fatura_para_reabrir == fatura.id_fatura:
+                st.warning(f"⚠️ Tem certeza que deseja REABRIR a fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
+                
+                if fatura.status == "Paga":
+                    st.error("🔄 Esta ação irá ESTORNAR o pagamento e devolver o valor para a conta!")
+                
+                st.info(f"📋 {len([c for c in st.session_state.gerenciador.compras_cartao if c.id_fatura == fatura.id_fatura])} lançamentos voltarão para 'em aberto'")
+                
+                col_confirm, col_cancel = st.columns(2)
+                
+                with col_confirm:
+                    if st.button("✅ Sim, reabrir", key=f"confirm_reopen_{fatura.id_fatura}", type="primary"):
+                        sucesso = st.session_state.gerenciador.reabrir_fatura(fatura.id_fatura)
+                        if sucesso:
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast("Fatura reaberta com sucesso!")
+                            st.session_state.fatura_para_reabrir = None
+                            st.rerun()
+                        else:
+                            st.error("Erro ao reabrir fatura.")
+                
+                with col_cancel:
+                    if st.button("❌ Cancelar", key=f"cancel_reopen_{fatura.id_fatura}"):
+                        st.session_state.fatura_para_reabrir = None
+                        st.rerun()
+            
+    
                         st.divider()
                         if st.button("Remover Cartão", key=f"remove_card_{cartao.id_cartao}", type="primary"):
                             st.session_state.cartao_para_excluir = cartao.id_cartao
