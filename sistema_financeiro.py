@@ -1348,7 +1348,7 @@ class GerenciadorContas:
         )
         return True
 
-      def reabrir_fatura(self, id_fatura: str) -> bool:
+    def reabrir_fatura(self, id_fatura: str) -> bool:
         """
         Reabre uma fatura fechada, voltando as compras para status 'em aberto'
         e estornando o pagamento se já foi pago.
@@ -1374,8 +1374,8 @@ class GerenciadorContas:
             # Busca a transação de pagamento
             transacao_pagamento = None
             for t in self.transacoes:
-                if (t.categoria == "Pagamento de Fatura" and 
-                    f"Fatura {fatura.data_vencimento.strftime('%m/%Y')}" in t.descricao):
+                if (t.categoria == "Cartão de Crédito" and 
+                    f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}" in t.descricao):
                     # Verifica se é do cartão correto
                     cartao = self.buscar_cartao_por_id(fatura.id_cartao)
                     if cartao and cartao.nome in t.descricao:
@@ -1400,8 +1400,7 @@ class GerenciadorContas:
         # Remove a fatura
         self.faturas.remove(fatura)
         
-        return True     
-
+        return True      
     def adicionar_categoria(self, nome: str) -> None:
         nome = (nome or "").strip()
         if nome and nome not in self.categorias:
