@@ -521,7 +521,7 @@ with tab_transacoes:
             sinal = "+" if t.tipo == "Receita" else "-"
             
             # === LINHA PRINCIPAL ===
-            col1, col2, col3, col4 = st.columns([1.2, 2, 2.5, 1.3])
+            col1, col2, col3, col4, col5 = st.columns([1.2, 2, 2.5, 1.3, 0.8])
             
             with col1:
                 st.text(t.data.strftime("%d/%m/%Y"))
@@ -544,6 +544,12 @@ with tab_transacoes:
             with col4:
                 st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")
             
+            with col5:
+                # Botão de excluir
+                if st.button("🗑️", key=f"del_trans_{t.id_transacao}", help="Excluir transação"):
+                    st.session_state.transacao_para_excluir = t.id_transacao
+                    st.rerun()
+            
             # === DETALHES SEMPRE VISÍVEIS ===
             col_det1, col_det2, col_det3 = st.columns([2, 2, 3])
             
@@ -562,6 +568,32 @@ with tab_transacoes:
                     st.caption(f"📝 {t.observacao}")
                 else:
                     st.caption("📝 -")
+            
+            # === CONFIRMAÇÃO DE EXCLUSÃO ===
+            if st.session_state.get('transacao_para_excluir') == t.id_transacao:
+                st.warning(f"⚠️ Tem certeza que deseja excluir esta transação?")
+                
+                col_confirm, col_cancel = st.columns(2)
+                
+                with col_confirm:
+                    if st.button("✅ Sim, excluir", key=f"confirm_del_{t.id_transacao}", type="primary"):
+                        # Estorna o valor na conta
+                        if t.tipo == "Receita":
+                            conta.saldo -= t.valor
+                        else:
+                            conta.saldo += t.valor
+                        
+                        # Remove a transação
+                        st.session_state.gerenciador.transacoes.remove(t)
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast("Transação excluída com sucesso!")
+                        st.session_state.transacao_para_excluir = None
+                        st.rerun()
+                
+                with col_cancel:
+                    if st.button("❌ Cancelar", key=f"cancel_del_{t.id_transacao}"):
+                        st.session_state.transacao_para_excluir = None
+                        st.rerun()
             
             st.divider()
 # --- CONTAS ---
