@@ -318,6 +318,7 @@ with tab_dashboard:
 
 
 # --- HISTÓRICO ---
+# --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
     
@@ -325,107 +326,211 @@ with tab_transacoes:
     from datetime import timedelta
     from dateutil.relativedelta import relativedelta
     
-    col_filtro1, col_filtro2 = st.columns([3, 2])
+    st.write("### 🔍 Filtros")
+    
+    col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
     
     with col_filtro1:
         periodo = st.selectbox(
-            "📅 Filtrar por Período:",
+            "📅 Período:",
             ["Últimos 30 dias", "Últimos 3 meses", "Últimos 6 meses", 
              "Este ano", "Ano passado", "Período Personalizado", "Tudo"],
-            index=1,  # Padrão: últimos 3 meses
+            index=1,
             key="filtro_periodo_transacoes"
         )
-    
-    # Calcula data limite
-    hoje = date.today()
-    
-    # Se for período personalizado, mostra seletores de data
-    if periodo == "Período Personalizado":
-        col_data1, col_data2 = st.columns(2)
-        with col_data1:
-            data_inicio = st.date_input(
-                "Data Início:",
-                value=hoje - relativedelta(months=3),
-                format="DD/MM/YYYY",
-                key="data_inicio_custom"
-            )
-        with col_data2:
-            data_fim = st.date_input(
-                "Data Fim:",
-                value=hoje,
-                format="DD/MM/YYYY",
-                key="data_fim_custom"
-            )
         
-        # Valida datas
-        if data_inicio > data_fim:
-            st.error("⚠️ Data de início não pode ser maior que data fim!")
-            data_limite = hoje - relativedelta(months=3)
-            data_fim = hoje
-        else:
-            data_limite = data_inicio
-    else:
-        # Períodos predefinidos
-        if periodo == "Últimos 30 dias":
-            data_limite = hoje - timedelta(days=30)
-        elif periodo == "Últimos 3 meses":
-            data_limite = hoje - relativedelta(months=3)
-        elif periodo == "Últimos 6 meses":
-            data_limite = hoje - relativedelta(months=6)
-        elif periodo == "Este ano":
-            data_limite = date(hoje.year, 1, 1)
-        elif periodo == "Ano passado":
-            data_limite = date(hoje.year - 1, 1, 1)
-        else:  # Tudo
-            data_limite = date(2000, 1, 1)
+        # Se período personalizado, mostra seletor de datas
+        if periodo == "Período Personalizado":
+            col_data1, col_data2 = st.columns(2)
+            with col_data1:
+                data_inicio_custom = st.date_input(
+                    "De:",
+                    value=date.today() - timedelta(days=90),
+                    format="DD/MM/YYYY",
+                    key="data_inicio_hist"
+                )
+            with col_data2:
+                data_fim_custom = st.date_input(
+                    "Até:",
+                    value=date.today(),
+                    format="DD/MM/YYYY",
+                    key="data_fim_hist"
+                )
         
-        data_fim = hoje
-    
-    # Filtra transações (entre data_limite e data_fim)
-    todas_transacoes = st.session_state.gerenciador.transacoes
-    transacoes = [
-        t for t in todas_transacoes 
-        if data_limite <= t.data <= data_fim
-    ]
+        # Filtro por conta
+        contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.contas]
+        conta_filtro = st.selectbox(
+            "🏦 Conta:",
+            options=contas_opcoes,
+            index=0,
+            key="filtro_conta_hist"
+        )
     
     with col_filtro2:
-        st.metric(
-            "📊 Exibindo", 
-            f"{len(transacoes):,}",
-            f"de {len(todas_transacoes):,}"
+        # Filtro por categoria
+        categorias_transacoes = set(t.categoria for t in st.session_state.gerenciador.transacoes if t.categoria)
+        categorias_opcoes = ["Todas"] + sorted(list(categorias_transacoes))
+        categoria_filtro = st.selectbox(
+            "📂 Categoria:",
+            options=categorias_opcoes,
+            index=0,
+            key="filtro_categoria_hist"
         )
         
-        # Mostra o período exato
-        if periodo == "Período Personalizado":
-            st.caption(f"{data_limite.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}")
+        # Filtro por TAG
+        tags_transacoes = set(getattr(t, 'tag', '') for t in st.session_state.gerenciador.transacoes if getattr(t, 'tag', ''))
+        tags_opcoes = ["Todas"] + sorted(list(tags_transacoes))
+        tag_filtro = st.selectbox(
+            "🏷️ TAG:",
+            options=tags_opcoes,
+            index=0,
+            key="filtro_tag_hist"
+        )
+    
+    with col_filtro3:
+        # Filtro por descrição
+        descricao_filtro = st.text_input(
+            "🔎 Buscar descrição:",
+            placeholder="Digite para filtrar...",
+            help="Busca parcial (não diferencia maiúsculas/minúsculas)",
+            key="filtro_descricao_hist"
+        )
+        
+        # Filtro por tipo
+        tipo_filtro = st.selectbox(
+            "💰 Tipo:",
+            options=["Todos", "Receita", "Despesa"],
+            index=0,
+            key="filtro_tipo_hist"
+        )
     
     st.divider()
     
-    # === RESTO DO CÓDIGO (não muda) ===
-    if not transacoes:
-        st.info("Nenhuma transação registrada para o período selecionado.")
+    # === CALCULAR PERÍODO ===
+    hoje = date.today()
+    
+    if periodo == "Últimos 30 dias":
+        data_inicio = hoje - timedelta(days=30)
+        data_fim = hoje
+    elif periodo == "Últimos 3 meses":
+        data_inicio = hoje - relativedelta(months=3)
+        data_fim = hoje
+    elif periodo == "Últimos 6 meses":
+        data_inicio = hoje - relativedelta(months=6)
+        data_fim = hoje
+    elif periodo == "Este ano":
+        data_inicio = date(hoje.year, 1, 1)
+        data_fim = hoje
+    elif periodo == "Ano passado":
+        data_inicio = date(hoje.year - 1, 1, 1)
+        data_fim = date(hoje.year - 1, 12, 31)
+    elif periodo == "Período Personalizado":
+        data_inicio = data_inicio_custom
+        data_fim = data_fim_custom
+    else:  # Tudo
+        data_inicio = None
+        data_fim = None
+    
+    # === APLICAR FILTROS ===
+    transacoes_filtradas = st.session_state.gerenciador.transacoes.copy()
+    
+    # Filtro de período
+    if data_inicio and data_fim:
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if data_inicio <= t.data_transacao <= data_fim
+        ]
+    
+    # Filtro por conta
+    if conta_filtro != "Todas":
+        conta_selecionada = next((c for c in st.session_state.gerenciador.contas if c.nome == conta_filtro), None)
+        if conta_selecionada:
+            transacoes_filtradas = [
+                t for t in transacoes_filtradas
+                if t.id_conta == conta_selecionada.id_conta
+            ]
+    
+    # Filtro por categoria
+    if categoria_filtro != "Todas":
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if t.categoria == categoria_filtro
+        ]
+    
+    # Filtro por TAG
+    if tag_filtro != "Todas":
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if getattr(t, 'tag', '') == tag_filtro
+        ]
+    
+    # Filtro por descrição
+    if descricao_filtro:
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if descricao_filtro.lower() in t.descricao.lower()
+        ]
+    
+    # Filtro por tipo
+    if tipo_filtro != "Todos":
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if t.tipo == tipo_filtro
+        ]
+    
+    # === ESTATÍSTICAS ===
+    total_receitas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Receita")
+    total_despesas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Despesa")
+    saldo_periodo = total_receitas - total_despesas
+    
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+    
+    with col_stat1:
+        st.metric("📊 Transações", len(transacoes_filtradas))
+    
+    with col_stat2:
+        st.metric("💰 Receitas", formatar_moeda(total_receitas))
+    
+    with col_stat3:
+        st.metric("💸 Despesas", formatar_moeda(total_despesas))
+    
+    with col_stat4:
+        delta_color = "normal" if saldo_periodo >= 0 else "inverse"
+        st.metric("📈 Saldo Período", formatar_moeda(saldo_periodo), delta_color=delta_color)
+    
+    st.divider()
+    
+    # === EXIBIÇÃO DAS TRANSAÇÕES ===
+    if not transacoes_filtradas:
+        st.info("🔍 Nenhuma transação encontrada com os filtros aplicados.")
     else:
-        mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
-        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
-        # ... resto permanece igual
-        mapa_contas = {c.id_conta: c.nome for c in st.session_state.gerenciador.contas}
-        col_data, col_conta, col_desc, col_cat, col_valor, col_acao = st.columns([2, 3, 4, 2, 2, 1])
-        col_data.write("Data")
-        col_conta.write("Conta")
-        col_desc.write("Descrição")
-        col_cat.write("Categoria")
-        col_valor.write("Valor")
-        col_acao.write("Ação")
-        st.divider()
-
-        for t in sorted(transacoes, key=lambda x: x.data, reverse=True):
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 4, 2, 2, 1])
+        # Ordena por data (mais recente primeiro)
+        transacoes_ordenadas = sorted(
+            transacoes_filtradas,
+            key=lambda t: t.data_transacao,
+            reverse=True
+        )
+        
+        for t in transacoes_ordenadas:
+            # Busca nome da conta
+            conta = st.session_state.gerenciador.buscar_conta_por_id(t.id_conta)
+            nome_conta = conta.nome if conta else "Conta não encontrada"
+            
+            # Cor baseada no tipo
+            cor_valor = "green" if t.tipo == "Receita" else "red"
+            sinal = "+" if t.tipo == "Receita" else "-"
+            
+            # === LINHA PRINCIPAL ===
+            col1, col2, col3, col4 = st.columns([1.2, 2, 2.5, 1.3])
+            
             with col1:
-                st.text(t.data.strftime("%d/%m/%Y"))
+                st.text(t.data_transacao.strftime("%d/%m/%Y"))
+            
             with col2:
-                st.text(mapa_contas.get(t.id_conta, "N/A"))
+                st.text(nome_conta)
+            
             with col3:
-                # Destaque para vendas de investimento com emoji
+                # Destaque para vendas de investimento
                 if t.categoria == "Venda de Investimento":
                     if "Lucro:" in t.descricao:
                         st.text(f"💰 {t.descricao}")
@@ -435,51 +540,30 @@ with tab_transacoes:
                         st.text(t.descricao)
                 else:
                     st.text(t.descricao)
-
-                if getattr(t, "tag", None):
-                    st.caption(f"🏷️ {t.tag}")
+            
             with col4:
-                st.text(t.categoria)
-            with col5:
-                valor_str = f"+{formatar_moeda(t.valor)}" if t.tipo == "Receita" else f"-{formatar_moeda(t.valor)}"
-                cor = "green" if t.tipo == "Receita" else "red"
-                st.markdown(f"<p style='color:{cor};'>{valor_str}</p>", unsafe_allow_html=True)
-            with col6:
-                if st.button("🗑️", key=f"del_{t.id_transacao}", help="Excluir esta transação"):
-                    st.session_state.transacao_para_excluir = t.id_transacao
-                    st.rerun()
-
-            # Exibir observação com destaque para P/L
-            if getattr(t, "observacao", None):
-                with st.expander("📝 Detalhes", expanded=False):
-                    # Se for venda de investimento, destaca o P/L
-                    if t.categoria == "Venda de Investimento" and "P/L:" in t.observacao:
-                        if "+" in t.observacao:
-                            st.success(f"💰 {t.observacao}")
-                        else:
-                            st.error(f"📉 {t.observacao}")
-                    else:
-                        st.write(t.observacao)
-
-            if st.session_state.transacao_para_excluir == t.id_transacao:
-                st.warning(f"Tem certeza que deseja excluir a transação '{t.descricao}'?")
-                col_confirm, col_cancel = st.columns(2)
-                with col_confirm:
-                    if st.button("Sim, excluir", key=f"confirm_del_{t.id_transacao}", type="primary"):
-                        sucesso = st.session_state.gerenciador.remover_transacao(t.id_transacao)
-                        if sucesso:
-                            st.session_state.gerenciador.salvar_dados()
-                            st.toast("Transação removida!")
-                            st.session_state.transacao_para_excluir = None
-                            st.rerun()
-                        else:
-                            st.error("Não foi possível remover a transação.")
-                with col_cancel:
-                    if st.button("Cancelar", key=f"cancel_del_{t.id_transacao}"):
-                        st.session_state.transacao_para_excluir = None
-                        st.rerun()
+                st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")
+            
+            # === DETALHES SEMPRE VISÍVEIS ===
+            col_det1, col_det2, col_det3 = st.columns([2, 2, 3])
+            
+            with col_det1:
+                st.caption(f"📂 {t.categoria}")
+            
+            with col_det2:
+                tag_texto = getattr(t, "tag", None)
+                if tag_texto:
+                    st.caption(f"🏷️ {tag_texto}")
+                else:
+                    st.caption("🏷️ -")
+            
+            with col_det3:
+                if t.observacao:
+                    st.caption(f"📝 {t.observacao}")
+                else:
+                    st.caption("📝 -")
+            
             st.divider()
-
 # --- CONTAS ---
 with tab_contas:
     st.header("Gerenciar Contas")
