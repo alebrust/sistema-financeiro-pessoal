@@ -34,7 +34,7 @@ class Transacao:
         data_transacao: date,
         categoria: str,
         observacao: str = "",
-        tag: str = ""
+        tag: str = "",
         id_transacao: Optional[str] = None,
     ):
         self.id_transacao = id_transacao or str(uuid4())
