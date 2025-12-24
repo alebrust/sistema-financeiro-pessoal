@@ -219,7 +219,7 @@ with tab_dashboard:
             # Resumo (com valor atual de investimentos)
             # --------------------------
             st.header("Resumo ")
-            todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()
+            todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()
             if todas_as_contas:
                 saldos_agrupados = defaultdict(float)
                 patrimonio_total = 0.0
