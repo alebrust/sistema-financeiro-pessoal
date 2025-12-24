@@ -35,7 +35,7 @@ for key, default in [
 
 st.title("BRUST Personal Finance 💰")
 
-tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
+tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config, tab_gerenciar = st.tabs(
     ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações", "📦 Gerenciar Contas"]
 )
 
