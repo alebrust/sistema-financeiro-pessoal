@@ -51,7 +51,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("📈 Comprar Ativo"):
             contas_investimento = [
-                c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaInvestimento)
+                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)
             ]
             if not contas_investimento:
                 st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
@@ -115,7 +115,7 @@ with tab_dashboard:
 
         # Vender Ativo
         with st.expander("📊 Vender Ativo", expanded=False):
-            contas_inv_venda = [c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaInvestimento)]
+            contas_inv_venda = [c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)]
             
             if not contas_inv_venda:
                 st.info("Crie uma Conta de Investimento para vender ativos.")
@@ -171,7 +171,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [
-                c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaCorrente)
+                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaCorrente)
             ]
             if not contas_correntes:
                 st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
