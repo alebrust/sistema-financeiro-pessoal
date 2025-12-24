@@ -118,10 +118,12 @@ class ContaCorrente(Conta):
         limite_cheque_especial: float = 0.0,
         logo_url: str = "",
         id_conta: Optional[str] = None,
+        arquivada: bool = False,
     ):
         super().__init__(nome=nome, logo_url=logo_url, id_conta=id_conta)
         self.saldo = float(saldo)
         self.limite_cheque_especial = float(limite_cheque_especial)
+        self.arquivada = arquivada
 
     def editar_limite(self, novo: float) -> bool:
         novo = float(novo)
@@ -138,6 +140,7 @@ class ContaCorrente(Conta):
             "logo_url": self.logo_url,
             "saldo": self.saldo,
             "limite_cheque_especial": self.limite_cheque_especial,
+            "arquivada": self.arquivada,
         }
 
 
@@ -149,10 +152,12 @@ class ContaInvestimento(Conta):
         saldo_caixa: float = 0.0,
         ativos: Optional[List[Ativo]] = None,
         id_conta: Optional[str] = None,
+        arquivada: bool = False,
     ):
         super().__init__(nome=nome, logo_url=logo_url, id_conta=id_conta)
         self.saldo_caixa = float(saldo_caixa)
         self.ativos: List[Ativo] = ativos or []
+        self.arquivada = arquivada
 
     @property
     def valor_em_ativos(self) -> float:
@@ -191,6 +196,7 @@ class ContaInvestimento(Conta):
             "logo_url": self.logo_url,
             "saldo_caixa": self.saldo_caixa,
             "ativos": [a.para_dict() for a in self.ativos],
+             "arquivada": self.arquivada,
         }
 
 
@@ -369,6 +375,7 @@ class GerenciadorContas:
                     limite_cheque_especial=float(c.get("limite_cheque_especial", 0.0)),
                     logo_url=c.get("logo_url", ""),
                     id_conta=c.get("id_conta"),
+                    arquivada=c.get("arquivada", False),
                 )
             else:
                 ativos_lidos: List[Ativo] = []
@@ -387,6 +394,7 @@ class GerenciadorContas:
                     saldo_caixa=float(c.get("saldo_caixa", 0.0)),
                     ativos=ativos_lidos,
                     id_conta=c.get("id_conta"),
+                    arquivada=c.get("arquivada", False),
                 )
             self.contas.append(conta)
 
@@ -1420,3 +1428,35 @@ class GerenciadorContas:
 
     def remover_categoria(self, nome: str) -> None:
         self.categorias = [c for c in self.categorias if c != nome]
+
+    # ------------------------
+    # Arquivamento de Contas
+    # ------------------------
+
+    def arquivar_conta(self, id_conta: str) -> bool:
+        """Arquiva uma conta (oculta das listagens principais)"""
+        conta = self.buscar_conta_por_id(id_conta)
+        if not conta:
+            return False
+        
+        conta.arquivada = True
+        self.salvar_dados()
+        return True
+
+    def desarquivar_conta(self, id_conta: str) -> bool:
+        """Desarquiva uma conta (volta a aparecer nas listagens)"""
+        conta = self.buscar_conta_por_id(id_conta)
+        if not conta:
+            return False
+        
+        conta.arquivada = False
+        self.salvar_dados()
+        return True
+
+    def obter_contas_ativas(self) -> List[Conta]:
+        """Retorna apenas contas não arquivadas"""
+        return [c for c in self.contas if not c.arquivada]
+
+    def obter_contas_arquivadas(self) -> List[Conta]:
+        """Retorna apenas contas arquivadas"""
+        return [c for c in self.contas if c.arquivada]
