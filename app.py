@@ -36,7 +36,7 @@ for key, default in [
 st.title("BRUST Personal Finance 💰")
 
 tab_dashboard, tab_transacoes, tab_contas, tab_cartoes, tab_config = st.tabs(
-    ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações"]
+    ["📊 Dashboard", "📈 Histórico", "🏦 Contas", "💳 Cartões", "⚙️ Configurações", "📦 Gerenciar Contas"]
 )
 
 # --- DASHBOARD ---
@@ -51,7 +51,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("📈 Comprar Ativo"):
             contas_investimento = [
-                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)
+                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)
             ]
             if not contas_investimento:
                 st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
@@ -115,7 +115,7 @@ with tab_dashboard:
 
         # Vender Ativo
         with st.expander("📊 Vender Ativo", expanded=False):
-            contas_inv_venda = [c for c in st.session_state.gerenciador.contas if isinstance(c, ContaInvestimento)]
+            contas_inv_venda = [c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)]
             
             if not contas_inv_venda:
                 st.info("Crie uma Conta de Investimento para vender ativos.")
@@ -171,7 +171,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [
-                c for c in st.session_state.gerenciador.contas if isinstance(c, ContaCorrente)
+                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaCorrente)
             ]
             if not contas_correntes:
                 st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
@@ -219,7 +219,7 @@ with tab_dashboard:
             # Resumo (com valor atual de investimentos)
             # --------------------------
             st.header("Resumo ")
-            todas_as_contas = st.session_state.gerenciador.contas
+            todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()
             if todas_as_contas:
                 saldos_agrupados = defaultdict(float)
                 patrimonio_total = 0.0
@@ -263,7 +263,7 @@ with tab_dashboard:
 
     with col1:
         st.header("Realizar Transferência")
-        todas_as_contas = st.session_state.gerenciador.contas
+        todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()
 
         if len(todas_as_contas) >= 2:
             # Mapa por ID, exibindo apenas nome
@@ -358,7 +358,7 @@ with tab_transacoes:
                 )
         
         # Filtro por conta
-        contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.contas]
+        contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.obter_contas_ativas()]contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.obter_contas_ativas()]
         conta_filtro = st.selectbox(
             "🏦 Conta:",
             options=contas_opcoes,
@@ -443,7 +443,7 @@ with tab_transacoes:
     
     # Filtro por conta
     if conta_filtro != "Todas":
-        conta_selecionada = next((c for c in st.session_state.gerenciador.contas if c.nome == conta_filtro), None)
+        conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)
         if conta_selecionada:
             transacoes_filtradas = [
                 t for t in transacoes_filtradas
@@ -632,7 +632,7 @@ with tab_contas:
 
     with col_contas1:
         st.subheader("Contas Existentes")
-        todas_as_contas = st.session_state.gerenciador.contas
+        todas_as_contas = st.session_state.gerenciador.obter_contas_ativas()
         if not todas_as_contas:
             st.info("Nenhuma conta cadastrada.")
         else:
@@ -1107,7 +1107,7 @@ with tab_cartoes:
                                         with st.form(f"pay_bill_form_{fatura.id_fatura}"):
                                             st.warning(f"Pagar {formatar_moeda(fatura.valor_total)} da fatura de {fatura.data_vencimento.strftime('%m/%Y')}?")
                                             contas_correntes_pagamento = [
-                                                c for c in st.session_state.gerenciador.contas 
+                                                c for c in st.session_state.gerenciador.obter_contas_ativas() 
                                                 if isinstance(c, ContaCorrente)
                                             ]
                                             mapa_cc_pag = {c.id_conta: c for c in contas_correntes_pagamento}
