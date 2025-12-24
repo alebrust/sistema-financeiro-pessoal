@@ -34,6 +34,7 @@ class Transacao:
         data_transacao: date,
         categoria: str,
         observacao: str = "",
+        tag: str = ""
         id_transacao: Optional[str] = None,
     ):
         self.id_transacao = id_transacao or str(uuid4())
@@ -44,6 +45,7 @@ class Transacao:
         self.data = data_transacao
         self.categoria = categoria
         self.observacao = observacao
+        self.tag = tag
 
     def para_dict(self) -> Dict[str, Any]:
         return {
@@ -55,6 +57,7 @@ class Transacao:
             "data": self.data.isoformat(),
             "categoria": self.categoria,
             "observacao": self.observacao,
+            "tag": self.tag,
         }
 
 
@@ -243,7 +246,8 @@ class CompraCartao:
         id_compra: Optional[str] = None,
         id_fatura: Optional[str] = None,
         data_compra_real: Optional[date] = None,  # data real da compra
-    ):
+        tag: str=""
+    ):    
         self.id_compra = id_compra or str(uuid4())
         self.id_cartao = id_cartao
         self.descricao = descricao
@@ -254,6 +258,7 @@ class CompraCartao:
         self.parcela_atual = int(parcela_atual)
         self.id_compra_original = id_compra_original or self.id_compra
         self.observacao = observacao
+        self.tag = tag
         self.id_fatura = id_fatura
         self.data_compra_real = data_compra_real or self.data_compra
 
@@ -269,6 +274,7 @@ class CompraCartao:
             "parcela_atual": self.parcela_atual,
             "id_compra_original": self.id_compra_original,
             "observacao": self.observacao,
+            "tag": self.tag,
             "id_fatura": self.id_fatura,
             "data_compra_real": self.data_compra_real.isoformat(),  # real
         }
@@ -395,6 +401,7 @@ class GerenciadorContas:
                     data_transacao=parse_date_safe(t.get("data"), date.today()),
                     categoria=t.get("categoria", "Outros"),
                     observacao=t.get("observacao", ""),
+                    tag=t.get("tag", ""),
                     id_transacao=t.get("id_transacao"),
                 )
             )
@@ -427,6 +434,7 @@ class GerenciadorContas:
                     parcela_atual=int(c.get("parcela_atual", 1)),
                     id_compra_original=c.get("id_compra_original"),
                     observacao=c.get("observacao", ""),
+                    tag=c.get("tag", ""),
                     id_fatura=c.get("id_fatura"),
                     data_compra_real=data_real,  # real
                 )
@@ -653,6 +661,7 @@ class GerenciadorContas:
         data_transacao: date,
         categoria: str,
         observacao: str = "",
+        tag: str = "",
     ) -> bool:
         conta = self.buscar_conta_por_id(id_conta)
         if not conta:
@@ -682,6 +691,7 @@ class GerenciadorContas:
                 data_transacao=data_transacao,
                 categoria=categoria,
                 observacao=observacao,
+                tag=tag,
             )
         )
         return True
@@ -1236,6 +1246,7 @@ class GerenciadorContas:
         categoria: str,
         num_parcelas: int = 1,
         observacao: str = "",
+        tag: str = "",
     ) -> bool:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
@@ -1274,6 +1285,7 @@ class GerenciadorContas:
                 parcela_atual=i + 1,
                 id_compra_original=id_compra_original,
                 observacao=observacao,
+                tag=tag,
                 data_compra_real=data_compra,        # real
             )
             self.compras_cartao.append(nova)
