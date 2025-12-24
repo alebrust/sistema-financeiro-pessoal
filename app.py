@@ -51,7 +51,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("📈 Comprar Ativo"):
             contas_investimento = [
-                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)
+                c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaInvestimento)
             ]
             if not contas_investimento:
                 st.warning("Crie uma Conta de Investimento na aba 'Contas' para comprar ativos.")
@@ -97,7 +97,7 @@ with tab_dashboard:
                         if not all([ticker, quantidade > 0, preco_unitario > 0]):
                             st.error("Preencha todos os detalhes da compra do ativo.")
                         else:
-                            sucesso = st.session_state.gerenciador.comprar_ativo(
+                            sucesso = st.session_state.gerenciador.obter_contas_ativas().comprar_ativo(
                                 id_conta_destino=conta_destino_id,
                                 ticker=ticker,
                                 quantidade=quantidade,
@@ -106,7 +106,7 @@ with tab_dashboard:
                                 data_compra=data_compra,
                             )
                             if sucesso:
-                                st.session_state.gerenciador.salvar_dados()
+                                st.session_state.gerenciador.obter_contas_ativas().salvar_dados()
                                 st.success(f"Compra de {ticker} registrada!")
                                 st.rerun()
                             else:
@@ -115,7 +115,7 @@ with tab_dashboard:
 
         # Vender Ativo
         with st.expander("📊 Vender Ativo", expanded=False):
-            contas_inv_venda = [c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaInvestimento)]
+            contas_inv_venda = [c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaInvestimento)]
             
             if not contas_inv_venda:
                 st.info("Crie uma Conta de Investimento para vender ativos.")
@@ -151,7 +151,7 @@ with tab_dashboard:
                     obs_venda = st.text_input("Observação (opcional)", key="obs_venda")
                     
                     if st.button("✅ Confirmar Venda", type="primary", key="vender_btn"):
-                        sucesso, mensagem = st.session_state.gerenciador.vender_ativo(
+                        sucesso, mensagem = st.session_state.gerenciador.obter_contas_ativas().vender_ativo(
                             id_conta=conta_venda_sel.id_conta,
                             ticker=ticker_venda.ticker,
                             quantidade=qtd_venda,
@@ -160,7 +160,7 @@ with tab_dashboard:
                             observacao=obs_venda
                         )
                         if sucesso:
-                            st.session_state.gerenciador.salvar_dados()
+                            st.session_state.gerenciador.obter_contas_ativas().salvar_dados()
                             st.success(mensagem)
                             st.rerun()
                         else:
@@ -171,7 +171,7 @@ with tab_dashboard:
         # --------------------------
         with st.expander("💸 Registrar Receita/Despesa", expanded=True):
             contas_correntes = [
-                c for c in st.session_state.gerenciador.obter_contas_ativas() if isinstance(c, ContaCorrente)
+                c for c in st.session_state.gerenciador.obter_contas_ativas().obter_contas_ativas() if isinstance(c, ContaCorrente)
             ]
             if not contas_correntes:
                 st.warning("Crie uma Conta Corrente para registrar receitas/despesas.")
@@ -187,7 +187,7 @@ with tab_dashboard:
                         key="tx_conta_corrente_id"
                     )
                     descricao = st.text_input("Descrição")
-                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.obter_contas_ativas().categorias)
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
                     data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
                     observacao = st.text_area("Observações (Opcional)")
@@ -443,7 +443,7 @@ with tab_transacoes:
     
     # Filtro por conta
     if conta_filtro != "Todas":
-        conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)
+        conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)
         if conta_selecionada:
             transacoes_filtradas = [
                 t for t in transacoes_filtradas
