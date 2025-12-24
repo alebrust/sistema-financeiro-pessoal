@@ -438,7 +438,7 @@ with tab_transacoes:
     if data_inicio and data_fim:
         transacoes_filtradas = [
             t for t in transacoes_filtradas
-            if data_inicio <= t.data_transacao <= data_fim
+            if data_inicio <= t.data <= data_fim
         ]
     
     # Filtro por conta
@@ -507,7 +507,7 @@ with tab_transacoes:
         # Ordena por data (mais recente primeiro)
         transacoes_ordenadas = sorted(
             transacoes_filtradas,
-            key=lambda t: t.data_transacao,
+            key=lambda t: t.data,
             reverse=True
         )
         
@@ -524,7 +524,7 @@ with tab_transacoes:
             col1, col2, col3, col4 = st.columns([1.2, 2, 2.5, 1.3])
             
             with col1:
-                st.text(t.data_transacao.strftime("%d/%m/%Y"))
+                st.text(t.data.strftime("%d/%m/%Y"))
             
             with col2:
                 st.text(nome_conta)
@@ -551,7 +551,7 @@ with tab_transacoes:
                 st.caption(f"📂 {t.categoria}")
             
             with col_det2:
-                tag_texto = getattr(t, "tag", None)
+                tag_texto = getattr(t, "tag", "")
                 if tag_texto:
                     st.caption(f"🏷️ {tag_texto}")
                 else:
