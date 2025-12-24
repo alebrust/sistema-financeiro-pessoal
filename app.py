@@ -358,7 +358,7 @@ with tab_transacoes:
                 )
         
         # Filtro por conta
-        contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.obter_contas_ativas()]contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.obter_contas_ativas()]
+        contas_opcoes = ["Todas"] + [c.nome for c in st.session_state.gerenciador.obter_contas_ativas()]
         conta_filtro = st.selectbox(
             "🏦 Conta:",
             options=contas_opcoes,
