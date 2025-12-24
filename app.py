@@ -191,6 +191,9 @@ with tab_dashboard:
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
                     data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
                     observacao = st.text_area("Observações (Opcional)")
+                    tag = st.text_input("TAG (Opcional)", placeholder="Ex: Viagem Matinhos 2025", help="Use TAGs para agrupar despesas relacionadas")
+                    
+
                     if st.form_submit_button("Registrar"):
                         if not all([descricao, categoria]):
                             st.error("Descrição e Categoria são obrigatórios.")
@@ -203,6 +206,7 @@ with tab_dashboard:
                                 data_transacao=data_transacao,
                                 categoria=categoria,
                                 observacao=observacao,
+                                tag=tag,
                             )
                             if sucesso:
                                 st.session_state.gerenciador.salvar_dados()
@@ -431,6 +435,9 @@ with tab_transacoes:
                         st.text(t.descricao)
                 else:
                     st.text(t.descricao)
+
+                if getattr(t, "tag", None):
+                    st.caption(f"🏷️ {t.tag}")
             with col4:
                 st.text(t.categoria)
             with col5:
@@ -789,6 +796,7 @@ with tab_cartoes:
                 data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
                 num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
                 observacao_compra = st.text_area("Observações (Opcional)")
+                tag_compra = st.text_input("TAG (Opcional)", placeholder="Ex: Viagem Matinhos 2025")
                 if st.form_submit_button("Lançar Compra", use_container_width=True):
                     if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                         st.error("Preencha todos os detalhes da compra.")
@@ -801,6 +809,7 @@ with tab_cartoes:
                             categoria=categoria_compra,
                             num_parcelas=num_parcelas,
                             observacao=observacao_compra,
+                            tag=tag_compra, 
                         )
                         if sucesso:
                             st.session_state.gerenciador.salvar_dados()
