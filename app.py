@@ -187,7 +187,7 @@ with tab_dashboard:
                         key="tx_conta_corrente_id"
                     )
                     descricao = st.text_input("Descrição")
-                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.obter_contas_ativas().categorias)
+                    categoria = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
                     data_transacao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
                     observacao = st.text_area("Observações (Opcional)")
@@ -899,40 +899,175 @@ with tab_cartoes:
             # Por ID, exibindo apenas nome do cartão
             mapa_cartao = {c.id_cartao: c for c in cartoes_cadastrados}
             ids_cartao = list(mapa_cartao.keys())
-            with st.form("add_card_purchase_form", clear_on_submit=True):
-                cartao_selecionado_id = st.selectbox(
-                    "Cartão Utilizado",
-                    options=ids_cartao,
-                    format_func=lambda cid: mapa_cartao[cid].nome,
-                    key="purchase_cartao_id"
-                )
-                descricao_compra = st.text_input("Descrição da Compra")
-                categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
-                valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
-                data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
-                num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
-                observacao_compra = st.text_area("Observações (Opcional)")
-                tag_compra = st.text_input("TAG (Opcional)", placeholder="Ex: Viagem Matinhos 2025")
-                if st.form_submit_button("Lançar Compra", use_container_width=True):
-                    if not all([descricao_compra, categoria_compra, valor_compra > 0]):
-                        st.error("Preencha todos os detalhes da compra.")
-                    else:
-                        sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                            id_cartao=cartao_selecionado_id,
-                            descricao=descricao_compra,
-                            valor_total=valor_compra,
-                            data_compra=data_compra_cartao,  # data real
-                            categoria=categoria_compra,
-                            num_parcelas=num_parcelas,
-                            observacao=observacao_compra,
-                            tag=tag_compra, 
-                        )
-                        if sucesso:
-                            st.session_state.gerenciador.salvar_dados()
-                            st.success("Compra registrada com sucesso!")
-                            st.rerun()
+            
+            # Tabs para separar os modos
+            tab_rapido, tab_individual = st.tabs(["🚀 Lançamento Rápido", "📝 Lançamento Individual"])
+            
+            with tab_rapido:
+                st.info("💡 **Modo Rápido:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
+                
+                # Inicializa lista de compras pendentes
+                if "compras_pendentes" not in st.session_state:
+                    st.session_state.compras_pendentes = []
+                
+                # Contador para gerar keys únicas
+                if "contador_compras" not in st.session_state:
+                    st.session_state.contador_compras = 0
+                
+                # Formulário para adicionar compras (sem submit = sem reload)
+                with st.form("form_rapido_compras", clear_on_submit=True):
+                    st.write("**Nova Compra:**")
+                    
+                    cartao_selecionado_id = st.selectbox(
+                        "Cartão",
+                        options=ids_cartao,
+                        format_func=lambda cid: mapa_cartao[cid].nome,
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        descricao_compra = st.text_input("Descrição")
+                    with col2:
+                        categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                    
+                    col3, col4, col5 = st.columns(3)
+                    with col3:
+                        valor_compra = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
+                    with col4:
+                        num_parcelas = st.number_input("Parcelas", min_value=1, value=1)
+                    with col5:
+                        data_compra_cartao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+                    
+                    col6, col7 = st.columns(2)
+                    with col6:
+                        tag_compra = st.text_input("TAG", placeholder="Ex: Viagem")
+                    with col7:
+                        observacao_compra = st.text_input("Observação", placeholder="Opcional")
+                    
+                    submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
+                    
+                    if submitted:
+                        if not all([descricao_compra, categoria_compra, valor_compra > 0]):
+                            st.error("⚠️ Preencha descrição, categoria e valor.")
                         else:
-                            st.error("Falha ao registrar a compra.")
+                            st.session_state.compras_pendentes.append({
+                                "id_cartao": cartao_selecionado_id,
+                                "cartao_nome": mapa_cartao[cartao_selecionado_id].nome,
+                                "descricao": descricao_compra,
+                                "valor_total": valor_compra,
+                                "data_compra": data_compra_cartao,
+                                "categoria": categoria_compra,
+                                "num_parcelas": num_parcelas,
+                                "observacao": observacao_compra,
+                                "tag": tag_compra,
+                            })
+                            st.session_state.contador_compras += 1
+                
+                # Mostra compras pendentes
+                if st.session_state.compras_pendentes:
+                    st.divider()
+                    st.success(f"✅ **{len(st.session_state.compras_pendentes)} compra(s) na lista**")
+                    
+                    # Lista as compras com opção de remover
+                    for idx, compra in enumerate(st.session_state.compras_pendentes):
+                        col_info, col_remove = st.columns([6, 1])
+                        
+                        with col_info:
+                            parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
+                            tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
+                            st.text(
+                                f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
+                                f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
+                                f"{compra['data_compra'].strftime('%d/%m/%Y')}{tag_txt}"
+                            )
+                        
+                        with col_remove:
+                            if st.button("🗑️", key=f"remove_pending_{idx}_{st.session_state.contador_compras}", help="Remover"):
+                                st.session_state.compras_pendentes.pop(idx)
+                                st.rerun()
+                    
+                    st.divider()
+                    
+                    # Botões de ação
+                    col_salvar, col_limpar = st.columns(2)
+                    
+                    with col_salvar:
+                        if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
+                            sucesso_total = 0
+                            falhas = []
+                            
+                            for compra in st.session_state.compras_pendentes:
+                                sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                                    id_cartao=compra["id_cartao"],
+                                    descricao=compra["descricao"],
+                                    valor_total=compra["valor_total"],
+                                    data_compra=compra["data_compra"],
+                                    categoria=compra["categoria"],
+                                    num_parcelas=compra["num_parcelas"],
+                                    observacao=compra["observacao"],
+                                    tag=compra["tag"],
+                                )
+                                if sucesso:
+                                    sucesso_total += 1
+                                else:
+                                    falhas.append(compra["descricao"])
+                            
+                            st.session_state.gerenciador.salvar_dados()
+                            
+                            if falhas:
+                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                            else:
+                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
+                            
+                            st.session_state.compras_pendentes = []
+                            st.rerun()
+                    
+                    with col_limpar:
+                        if st.button("🗑️ Limpar Lista", use_container_width=True):
+                            st.session_state.compras_pendentes = []
+                            st.rerun()
+                else:
+                    st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
+            
+            with tab_individual:
+                st.info("📝 **Modo Individual:** Cada compra é salva imediatamente após o envio.")
+                
+                with st.form("add_card_purchase_form", clear_on_submit=True):
+                    cartao_selecionado_id = st.selectbox(
+                        "Cartão Utilizado",
+                        options=ids_cartao,
+                        format_func=lambda cid: mapa_cartao[cid].nome,
+                        key="purchase_cartao_id"
+                    )
+                    descricao_compra = st.text_input("Descrição da Compra")
+                    categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+                    valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
+                    data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
+                    num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
+                    observacao_compra = st.text_area("Observações (Opcional)")
+                    tag_compra = st.text_input("TAG (Opcional)", placeholder="Ex: Viagem Matinhos 2025")
+                    
+                    if st.form_submit_button("Lançar Compra", use_container_width=True):
+                        if not all([descricao_compra, categoria_compra, valor_compra > 0]):
+                            st.error("Preencha todos os detalhes da compra.")
+                        else:
+                            sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                                id_cartao=cartao_selecionado_id,
+                                descricao=descricao_compra,
+                                valor_total=valor_compra,
+                                data_compra=data_compra_cartao,
+                                categoria=categoria_compra,
+                                num_parcelas=num_parcelas,
+                                observacao=observacao_compra,
+                                tag=tag_compra, 
+                            )
+                            if sucesso:
+                                st.session_state.gerenciador.salvar_dados()
+                                st.success("Compra registrada com sucesso!")
+                                st.rerun()
+                            else:
+                                st.error("Falha ao registrar a compra.")
+        
 
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
@@ -1251,3 +1386,83 @@ with tab_config:
                 st.session_state.gerenciador.salvar_dados()
                 st.toast(f"Categoria '{nome}' adicionada!")
                 st.rerun()
+
+# --- GERENCIAR CONTAS (ARQUIVAR/DESARQUIVAR) ---  ← ADICIONE AQUI (LOGO APÓS)
+with tab_gerenciar:
+    st.header("📦 Gerenciar Contas")
+    
+    st.info("""
+    💡 **Como funciona o arquivamento:**
+    - Contas arquivadas não aparecem nos seletores de transações
+    - O saldo e histórico são preservados
+    - Você pode desarquivar a qualquer momento
+    """)
+    
+    st.divider()
+    
+    col_ativas, col_arquivadas = st.columns(2)
+    
+    # === CONTAS ATIVAS ===
+    with col_ativas:
+        st.subheader("✅ Contas Ativas")
+        
+        contas_ativas = st.session_state.gerenciador.obter_contas_ativas()
+        
+        if not contas_ativas:
+            st.info("Nenhuma conta ativa no momento.")
+        else:
+            for conta in contas_ativas:
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    
+                    with col1:
+                        tipo_icon = "🏦" if isinstance(conta, ContaCorrente) else "📈"
+                        st.text(f"{tipo_icon} {conta.nome}")
+                    
+                    with col2:
+                        saldo_cor = "green" if conta.saldo >= 0 else "red"
+                        st.markdown(f":{saldo_cor}[{formatar_moeda(conta.saldo)}]")
+                    
+                    with col3:
+                        if st.button("📦", key=f"arquivar_{conta.id_conta}", help="Arquivar conta"):
+                            if st.session_state.gerenciador.arquivar_conta(conta.id_conta):
+                                st.toast(f"✅ '{conta.nome}' arquivada!")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao arquivar.")
+                    
+                    tipo_texto = "Conta Corrente" if isinstance(conta, ContaCorrente) else "Investimento"
+                    st.caption(f"Tipo: {tipo_texto}")
+                    st.divider()
+    
+    # === CONTAS ARQUIVADAS ===
+    with col_arquivadas:
+        st.subheader("📦 Contas Arquivadas")
+        
+        contas_arquivadas = st.session_state.gerenciador.obter_contas_arquivadas()
+        
+        if not contas_arquivadas:
+            st.info("Nenhuma conta arquivada.")
+        else:
+            for conta in contas_arquivadas:
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    
+                    with col1:
+                        tipo_icon = "🏦" if isinstance(conta, ContaCorrente) else "📈"
+                        st.text(f"{tipo_icon} {conta.nome}")
+                    
+                    with col2:
+                        st.text(formatar_moeda(conta.saldo))
+                    
+                    with col3:
+                        if st.button("🔓", key=f"desarquivar_{conta.id_conta}", help="Desarquivar conta"):
+                            if st.session_state.gerenciador.desarquivar_conta(conta.id_conta):
+                                st.toast(f"✅ '{conta.nome}' desarquivada!")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao desarquivar.")
+                    
+                    tipo_texto = "Conta Corrente" if isinstance(conta, ContaCorrente) else "Investimento"
+                    st.caption(f"Tipo: {tipo_texto}")
+                    st.divider()
