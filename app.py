@@ -1120,16 +1120,24 @@ with tab_cartoes:
                                     c1, c2 = st.columns([4, 1])
                                     venc_str = compra.data_compra.strftime("%d/%m/%Y")
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    
+                                    # Monta descrição com observação inline
                                     desc = f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}"
+                                    
                                     c1.text(desc)
+                                    
+                                    # Exibe observação diretamente abaixo (se existir)
+                                    if getattr(compra, "observacao", None):
+                                        c1.caption(f"📝 {compra.observacao}")
+                                    
+                                    # Exibe TAG diretamente abaixo (se existir)
+                                    if getattr(compra, "tag", None):
+                                        c1.caption(f"🏷️ {compra.tag}")
+                                    
                                     with c2:
                                         if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
                                             st.session_state.compra_para_excluir = compra.id_compra_original
                                             st.rerun()
-
-                                    if getattr(compra, "observacao", None):
-                                        with st.expander("Observação", expanded=False):
-                                            st.write(compra.observacao)
 
                                     if st.session_state.compra_para_excluir == compra.id_compra_original:
                                         st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
@@ -1174,10 +1182,14 @@ with tab_cartoes:
                                     venc_str = compra.data_compra.strftime("%d/%m/%Y")
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
                                     st.text(f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}")
-
+                                    
+                                    # Exibe observação diretamente abaixo (se existir)
                                     if getattr(compra, "observacao", None):
-                                        with st.expander("Observação", expanded=False):
-                                            st.write(compra.observacao)
+                                        st.caption(f"📝 {compra.observacao}")
+                                    
+                                    # Exibe TAG diretamente abaixo (se existir)
+                                    if getattr(compra, "tag", None):
+                                        st.caption(f"🏷️ {compra.tag}")
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -1205,10 +1217,14 @@ with tab_cartoes:
                                                 venc_str = lanc.data_compra.strftime("%d/%m/%Y")
                                                 real_str = getattr(lanc, "data_compra_real", lanc.data_compra).strftime("%d/%m/%Y")
                                                 st.text(f"Venc.: {venc_str} • Compra: {real_str} — {lanc.descricao}: {formatar_moeda(lanc.valor)}")
-                        
+                                                
+                                                # Exibe observação diretamente abaixo (se existir)
                                                 if getattr(lanc, "observacao", None):
-                                                    with st.expander("Observação", expanded=False):
-                                                        st.write(lanc.observacao)
+                                                    st.caption(f"📝 {lanc.observacao}")
+                                                
+                                                # Exibe TAG diretamente abaixo (se existir)
+                                                if getattr(lanc, "tag", None):
+                                                    st.caption(f"🏷️ {lanc.tag}")
 
                                     # === BOTÕES DE AÇÃO ===
                                     if fatura.status == "Fechada":
