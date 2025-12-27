@@ -215,7 +215,7 @@ class CartaoCredito:
         self.logo_url = logo_url
         self.dia_fechamento = int(dia_fechamento)
         self.dia_vencimento = int(dia_vencimento)
-        self.fechamentos_customizados = fechamentos_customizados or {}
+        self.fechamentos_customizados = fechamentos_customizados if fechamentos_customizados is not None else {}
 
     def para_dict(self) -> Dict[str, Any]:
         return {
