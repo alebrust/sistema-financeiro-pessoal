@@ -1252,7 +1252,6 @@ class GerenciadorContas:
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
         ]
-
     def registrar_compra_cartao(
         self,
         id_cartao: str,
@@ -1267,69 +1266,46 @@ class GerenciadorContas:
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return False
-
-
-     # ✅ ADICIONE ESTAS LINHAS AQUI (VALIDAÇÃO DE CICLO FECHADO)
-        # Calcula em qual ciclo a primeira parcela cairá
-
-
-        # Usa o método calcular_ciclo_compra para determinar o ciclo correto
-        ano_ciclo, mes_ciclo = self.calcular_ciclo_compra(id_cartao, data_compra)
-        
-        # Calcula a data de vencimento baseada no ciclo
-        try:
-            vencimento_primeira = date(ano_ciclo, mes_ciclo, cartao.dia_vencimento)
-        except ValueError:
-            # Se o dia de vencimento não existe no mês (ex: 31 em fevereiro), usa o último dia
-            ultimo_dia = calendar.monthrange(ano_ciclo, mes_ciclo)[1]
-            vencimento_primeira = date(ano_ciclo, mes_ciclo, min(cartao.dia_vencimento, ultimo_dia))
-
-        
-        # Verifica se o ciclo da primeira parcela está fechado
-        if self.ciclo_esta_fechado(id_cartao, vencimento_primeira.year, vencimento_primeira.month):
-            return False  # Não permite lançar em ciclo fechado
-        # ← FIM DA VALIDAÇÃO
-
-
-
+    
         valor_parcela = round(float(valor_total) / int(num_parcelas), 2)
         id_compra_original = str(uuid4())
-
-        try:
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
-        except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
-
-        try:
-            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
-        except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            base_venc = date(data_compra.year, data_compra.month, ultimo)
-
-        if data_compra <= data_fechamento_ciclo:
-            vencimento_primeira = base_venc + relativedelta(months=1)
-        else:
-            vencimento_primeira = base_venc + relativedelta(months=2)
-
+    
+        # Para cada parcela
         for i in range(num_parcelas):
-            data_venc_parcela = vencimento_primeira + relativedelta(months=i)
+            # Calcula a data da compra considerando o mês da parcela
+            # Parcela 1 = mês da compra, Parcela 2 = mês seguinte, etc.
+            data_compra_parcela = data_compra + relativedelta(months=i)
+            
+            # Calcula o ciclo correto para esta parcela
+            ano_ciclo, mes_ciclo = self.calcular_ciclo_compra(id_cartao, data_compra_parcela)
+            
+            # Calcula a data de vencimento baseada no ciclo
+            try:
+                data_vencimento = date(ano_ciclo, mes_ciclo, cartao.dia_vencimento)
+            except ValueError:
+                # Se o dia de vencimento não existe no mês, usa o último dia
+                ultimo_dia = calendar.monthrange(ano_ciclo, mes_ciclo)[1]
+                data_vencimento = date(ano_ciclo, mes_ciclo, min(cartao.dia_vencimento, ultimo_dia))
+            
+            # Cria a descrição da parcela
             desc_parcela = f"{descricao} ({i + 1}/{num_parcelas})" if num_parcelas > 1 else descricao
+            
+            # Cria a compra
             nova = CompraCartao(
                 id_cartao=id_cartao,
                 descricao=desc_parcela,
                 valor=valor_parcela,
-                data_compra=data_venc_parcela,      # vencimento
+                data_compra=data_vencimento,      # vencimento
                 categoria=categoria,
                 total_parcelas=num_parcelas,
                 parcela_atual=i + 1,
                 id_compra_original=id_compra_original,
                 observacao=observacao,
                 tag=tag,
-                data_compra_real=data_compra,        # real
+                data_compra_real=data_compra,     # data real da compra
             )
             self.compras_cartao.append(nova)
-
+    
         return True
 
     def remover_compra_cartao(self, id_compra_original: str) -> None:
@@ -1498,15 +1474,19 @@ class GerenciadorContas:
                 fatura.data_vencimento.month == mes):
                 return True
         return False
-    
+
 
     def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
         """
         Calcula em qual ciclo (ano, mês) a compra cairá baseado na data de fechamento.
         
         LÓGICA:
-        - Ciclo MM/AAAA abrange compras de (dia_fechamento + 1) do mês anterior até dia_fechamento do mês MM
-        - Exemplo: Fechamento dia 02, Ciclo 12/2025 = compras de 03/11/2025 até 02/12/2025
+        - Se a compra foi feita ATÉ o dia de fechamento do mês atual → ciclo do mês atual
+        - Se a compra foi feita APÓS o dia de fechamento do mês atual → ciclo do próximo mês
+        
+        Exemplo: Fechamento dia 02
+        - Compra em 30/11/2025 (antes do dia 02/12) → ciclo 12/2025
+        - Compra em 03/12/2025 (depois do dia 02/12) → ciclo 01/2026
         
         Retorna (ano, mes) do vencimento.
         """
@@ -1514,28 +1494,23 @@ class GerenciadorContas:
         if not cartao:
             return (data_compra.year, data_compra.month)
         
-        # Calcula o mês/ano do ciclo testando se a compra está antes ou depois do fechamento
-        ano_teste = data_compra.year
-        mes_teste = data_compra.month
+        ano_ciclo = data_compra.year
+        mes_ciclo = data_compra.month
         
-        # Verifica se há fechamento customizado para o mês atual
-        chave_mes_atual = f"{ano_teste}-{mes_teste:02d}"
-        dia_fechamento_atual = cartao.fechamentos_customizados.get(chave_mes_atual, cartao.dia_fechamento)
+        # Verifica se há fechamento customizado para o mês atual da compra
+        chave_mes = f"{data_compra.year}-{data_compra.month:02d}"
+        dia_fechamento = cartao.fechamentos_customizados.get(chave_mes, cartao.dia_fechamento)
         
-        # Se a compra foi feita APÓS o dia de fechamento do mês atual,
-        # ela entra no ciclo do PRÓXIMO mês
-        if data_compra.day > dia_fechamento_atual:
-            # Avança para o próximo mês
-            if mes_teste == 12:
-                ano_teste += 1
-                mes_teste = 1
+        # Se a compra foi feita APÓS o dia de fechamento, vai para o próximo ciclo
+        if data_compra.day > dia_fechamento:
+            if mes_ciclo == 12:
+                ano_ciclo += 1
+                mes_ciclo = 1
             else:
-                mes_teste += 1
+                mes_ciclo += 1
         
-        # Se a compra foi feita ATÉ o dia de fechamento,
-        # ela entra no ciclo do MÊS ATUAL
-        
-        return (ano_teste, mes_teste)
+        # Caso contrário, permanece no ciclo do mês atual
+        return (ano_ciclo, mes_ciclo)
 
     
     # ------------------------
@@ -1569,3 +1544,27 @@ class GerenciadorContas:
     def obter_contas_arquivadas(self) -> List[Conta]:
         """Retorna apenas contas arquivadas"""
         return [c for c in self.contas if c.arquivada]
+
+
+
+
+
+
+    def debug_ciclo(self, id_cartao: str, data_compra: date):
+        """Método temporário para debug"""
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return "Cartão não encontrado"
+        
+        chave_mes = f"{data_compra.year}-{data_compra.month:02d}"
+        dia_fechamento = cartao.fechamentos_customizados.get(chave_mes, cartao.dia_fechamento)
+        
+        ano_ciclo, mes_ciclo = self.calcular_ciclo_compra(id_cartao, data_compra)
+        
+        return f"""
+        Data da compra: {data_compra.strftime('%d/%m/%Y')}
+        Dia de fechamento: {dia_fechamento}
+        Dia da compra: {data_compra.day}
+        Compra APÓS fechamento? {data_compra.day > dia_fechamento}
+        Ciclo calculado: {mes_ciclo:02d}/{ano_ciclo}
+        """
