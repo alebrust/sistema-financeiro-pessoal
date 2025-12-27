@@ -1413,171 +1413,112 @@ with tab_cartoes:
                         if st.button("Cancelar", key=f"cancel_del_card_{cartao.id_cartao}"):
                             st.session_state.cartao_para_excluir = None
                             st.rerun()
+    
+with tab_config:
+    st.header("Configurações Gerais")
+    st.subheader("Gerenciar Categorias")
 
-    with tab_config:
-        st.header("Configurações Gerais")
-        st.subheader("Gerenciar Categorias")
-    
-        col_cat1, col_cat2 = st.columns([3, 2])
-    
-        with col_cat1:
-            st.write("Categorias existentes:")
-            categorias = st.session_state.gerenciador.categorias
-    
-            if not categorias:
-                st.info("Nenhuma categoria cadastrada.")
-            else:
-                for cat in categorias:
-                    cat_col1, cat_col2 = st.columns([4, 1])
-                    cat_col1.write(f"- {cat}")
-    
-                    if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
-                        st.session_state.categoria_para_excluir = cat
-                        st.rerun()
-    
-                    if st.session_state.categoria_para_excluir == cat:
-                        st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
-                        col_confirm, col_cancel, _ = st.columns([1, 1, 3])
-    
-                        with col_confirm:
-                            if st.button("Sim, excluir permanentemente", key=f"confirm_del_cat_{cat}", type="primary"):
-                                st.session_state.gerenciador.remover_categoria(cat)
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"Categoria '{cat}' removida!")
-                                st.session_state.categoria_para_excluir = None
-                                st.rerun()
-    
-                        with col_cancel:
-                            if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
-                                st.session_state.categoria_para_excluir = None
-                                st.rerun()
-    
-        with col_cat2:
-            st.write("Nova categoria")
-            nova_cat = st.text_input("Nome da categoria", key="nova_categoria_input")
-            if st.button("Adicionar categoria", key="add_categoria_btn"):
-                nome = (nova_cat or "").strip()
-                if not nome:
-                    st.warning("Informe um nome para a categoria.")
-                elif nome in st.session_state.gerenciador.categorias:
-                    st.info(f"A categoria '{nome}' já existe.")
-                else:
-                    st.session_state.gerenciador.adicionar_categoria(nome)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.toast(f"Categoria '{nome}' adicionada!")
+    col_cat1, col_cat2 = st.columns([3, 2])
+
+    with col_cat1:
+        st.write("Categorias existentes:")
+        categorias = st.session_state.gerenciador.categorias
+
+        if not categorias:
+            st.info("Nenhuma categoria cadastrada.")
+        else:
+            for cat in categorias:
+                cat_col1, cat_col2 = st.columns([4, 1])
+                cat_col1.write(f"- {cat}")
+
+                if cat_col2.button("🗑️", key=f"del_cat_{cat}", help=f"Excluir categoria '{cat}'"):
+                    st.session_state.categoria_para_excluir = cat
                     st.rerun()
-    
-        st.divider()
-    
-        st.subheader("Gerenciar TAGs")
-        st.caption("TAGs são opcionais e servem para organizar transações e compras por projetos, viagens, eventos, etc.")
-    
-        col_tag1, col_tag2 = st.columns([3, 2])
-    
-        with col_tag1:
-            st.write("TAGs existentes:")
-            tags = st.session_state.gerenciador.tags
-    
-            if not tags:
-                st.info("Nenhuma TAG cadastrada.")
-            else:
-                for tag in tags:
-                    tag_col1, tag_col2 = st.columns([4, 1])
-    
-                    tag_col1.write(f"🏷️ {tag}")
-    
-                    if tag_col2.button("🗑️", key=f"del_tag_{tag}", help=f"Excluir TAG '{tag}'"):
-                        st.session_state.tag_para_excluir = tag
-                        st.rerun()
-    
-                    if st.session_state.get("tag_para_excluir") == tag:
-                        st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a TAG '{tag}'?")
-                        col_confirm, col_cancel, _ = st.columns([1, 1, 3])
-    
-                        with col_confirm:
-                            if st.button("Sim, excluir", key=f"confirm_del_tag_{tag}", type="primary"):
-                                st.session_state.gerenciador.remover_tag(tag)
-                                st.session_state.gerenciador.salvar_dados()
-                                st.toast(f"TAG '{tag}' removida!")
-                                st.session_state.tag_para_excluir = None
-                                st.rerun()
-    
-                        with col_cancel:
-                            if st.button("Cancelar", key=f"cancel_del_tag_{tag}"):
-                                st.session_state.tag_para_excluir = None
-                                st.rerun()
-    
-        with col_tag2:
-            st.write("Nova TAG")
-            nova_tag = st.text_input("Nome da TAG", key="nova_tag_input", placeholder="Ex: Viagem 2025")
-            if st.button("Adicionar TAG", key="add_tag_btn"):
-                nome = (nova_tag or "").strip()
-                if not nome:
-                    st.warning("Informe um nome para a TAG.")
-                elif nome in st.session_state.gerenciador.tags:
-                    st.info(f"A TAG '{nome}' já existe.")
-                else:
-                    st.session_state.gerenciador.adicionar_tag(nome)
-                    st.session_state.gerenciador.salvar_dados()
-                    st.toast(f"TAG '{nome}' adicionada!")
-                    st.rerun()
-    
-        st.subheader("Gerenciar TAGs")
-            st.caption("TAGs são opcionais e servem para organizar transações e compras por projetos, viagens, eventos, etc.")
-            
-            col_tag1, col_tag2 = st.columns([3, 2])
-            
-            with col_tag1:
-                st.write("TAGs existentes:")
-                tags = st.session_state.gerenciador.tags
-                
-                if not tags:
-                    st.info("Nenhuma TAG cadastrada.")
-                else:
-                    for tag in tags:
-                        tag_col1, tag_col2 = st.columns([4, 1])
-                        
-                        tag_col1.write(f"🏷️ {tag}")
-                        
-                        if tag_col2.button("🗑️", key=f"del_tag_{tag}", help=f"Excluir TAG '{tag}'"):
-                            st.session_state.tag_para_excluir = tag
+
+                if st.session_state.categoria_para_excluir == cat:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a categoria '{cat}'?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+
+                    with col_confirm:
+                        if st.button("Sim, excluir permanentemente", key=f"confirm_del_cat_{cat}", type="primary"):
+                            st.session_state.gerenciador.remover_categoria(cat)
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"Categoria '{cat}' removida!")
+                            st.session_state.categoria_para_excluir = None
                             st.rerun()
-                        
-                        if st.session_state.get("tag_para_excluir") == tag:
-                            st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a TAG '{tag}'?")
-                            col_confirm, col_cancel, _ = st.columns([1, 1, 3])
-                            
-                            with col_confirm:
-                                if st.button(
-                                    "Sim, excluir",
-                                    key=f"confirm_del_tag_{tag}",
-                                    type="primary"
-                                ):
-                                    st.session_state.gerenciador.remover_tag(tag)
-                                    st.session_state.gerenciador.salvar_dados()
-                                    st.toast(f"TAG '{tag}' removida!")
-                                    st.session_state.tag_para_excluir = None
-                                    st.rerun()
-                            
-                            with col_cancel:
-                                if st.button("Cancelar", key=f"cancel_del_tag_{tag}"):
-                                    st.session_state.tag_para_excluir = None
-                                    st.rerun()
-            
-            with col_tag2:
-                st.write("Nova TAG")
-                nova_tag = st.text_input("Nome da TAG", key="nova_tag_input", placeholder="Ex: Viagem 2025")
-                if st.button("Adicionar TAG", key="add_tag_btn"):
-                    nome = (nova_tag or "").strip()
-                    if not nome:
-                        st.warning("Informe um nome para a TAG.")
-                    elif nome in st.session_state.gerenciador.tags:
-                        st.info(f"A TAG '{nome}' já existe.")
-                    else:
-                        st.session_state.gerenciador.adicionar_tag(nome)
-                        st.session_state.gerenciador.salvar_dados()
-                        st.toast(f"TAG '{nome}' adicionada!")
-                        st.rerun()
+
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_cat_{cat}"):
+                            st.session_state.categoria_para_excluir = None
+                            st.rerun()
+
+    with col_cat2:
+        st.write("Nova categoria")
+        nova_cat = st.text_input("Nome da categoria", key="nova_categoria_input")
+        if st.button("Adicionar categoria", key="add_categoria_btn"):
+            nome = (nova_cat or "").strip()
+            if not nome:
+                st.warning("Informe um nome para a categoria.")
+            elif nome in st.session_state.gerenciador.categorias:
+                st.info(f"A categoria '{nome}' já existe.")
+            else:
+                st.session_state.gerenciador.adicionar_categoria(nome)
+                st.session_state.gerenciador.salvar_dados()
+                st.toast(f"Categoria '{nome}' adicionada!")
+                st.rerun()
+
+    st.divider()
+    st.subheader("Gerenciar TAGs")
+    st.caption("TAGs são opcionais e servem para organizar transações e compras por projetos, viagens, eventos, etc.")
+
+    col_tag1, col_tag2 = st.columns([3, 2])
+
+    with col_tag1:
+        st.write("TAGs existentes:")
+        tags = st.session_state.gerenciador.tags
+
+        if not tags:
+            st.info("Nenhuma TAG cadastrada.")
+        else:
+            for tag in tags:
+                tag_col1, tag_col2 = st.columns([4, 1])
+                tag_col1.write(f"🏷️ {tag}")
+
+                if tag_col2.button("🗑️", key=f"del_tag_{tag}", help=f"Excluir TAG '{tag}'"):
+                    st.session_state.tag_para_excluir = tag
+                    st.rerun()
+
+                if st.session_state.get("tag_para_excluir") == tag:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a TAG '{tag}'?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+
+                    with col_confirm:
+                        if st.button("Sim, excluir", key=f"confirm_del_tag_{tag}", type="primary"):
+                            st.session_state.gerenciador.remover_tag(tag)
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"TAG '{tag}' removida!")
+                            st.session_state.tag_para_excluir = None
+                            st.rerun()
+
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_tag_{tag}"):
+                            st.session_state.tag_para_excluir = None
+                            st.rerun()
+
+    with col_tag2:
+        st.write("Nova TAG")
+        nova_tag = st.text_input("Nome da TAG", key="nova_tag_input", placeholder="Ex: Viagem 2025")
+        if st.button("Adicionar TAG", key="add_tag_btn"):
+            nome = (nova_tag or "").strip()
+            if not nome:
+                st.warning("Informe um nome para a TAG.")
+            elif nome in st.session_state.gerenciador.tags:
+                st.info(f"A TAG '{nome}' já existe.")
+            else:
+                st.session_state.gerenciador.adicionar_tag(nome)
+                st.session_state.gerenciador.salvar_dados()
+                st.toast(f"TAG '{nome}' adicionada!")
+                st.rerun()
 
 
 # --- GERENCIAR CONTAS (ARQUIVAR/DESARQUIVAR) ---  ← ADICIONE AQUI (LOGO APÓS)
