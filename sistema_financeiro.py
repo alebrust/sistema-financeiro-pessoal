@@ -208,12 +208,14 @@ class CartaoCredito:
         dia_fechamento: int = 28,
         dia_vencimento: int = 10,
         id_cartao: Optional[str] = None,
+        fechamentos_customizados: Optional[Dict[str, int]] = None,
     ):
         self.id_cartao = id_cartao or str(uuid4())
         self.nome = nome
         self.logo_url = logo_url
         self.dia_fechamento = int(dia_fechamento)
         self.dia_vencimento = int(dia_vencimento)
+        self.fechamentos_customizados = fechamentos_customizados or {}
 
     def para_dict(self) -> Dict[str, Any]:
         return {
@@ -222,6 +224,7 @@ class CartaoCredito:
             "logo_url": self.logo_url,
             "dia_fechamento": self.dia_fechamento,
             "dia_vencimento": self.dia_vencimento,
+            "fechamentos_customizados": self.fechamentos_customizados,  
         }
 
     def editar_nome(self, novo_nome: str) -> bool:
@@ -425,6 +428,7 @@ class GerenciadorContas:
                     dia_fechamento=int(cc.get("dia_fechamento", 28)),
                     dia_vencimento=int(cc.get("dia_vencimento", 10)),
                     id_cartao=cc.get("id_cartao"),
+                    fechamentos_customizados=cc.get("fechamentos_customizados", {}), 
                 )
             )
 
@@ -1498,36 +1502,30 @@ class GerenciadorContas:
                 return True
         return False
     
-   
+
     def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
         """
         Calcula em qual ciclo (ano, mês) a compra cairá baseado na data de fechamento.
-        Retorna (ano, mes) do VENCIMENTO da fatura.
+        Retorna (ano, mes) do vencimento.
         """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return (data_compra.year, data_compra.month)
         
-        try:
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
-        except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
+        # Verifica se há fechamento customizado para este mês
+        chave_mes = f"{data_compra.year}-{data_compra.month:02d}"
+        dia_fechamento = cartao.fechamentos_customizados.get(chave_mes, cartao.dia_fechamento)
         
-        try:
-            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
-        except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            base_venc = date(data_compra.year, data_compra.month, ultimo)
-        
-        # Se a compra foi ANTES ou NO dia do fechamento, vai para o próximo mês
-        if data_compra <= data_fechamento_ciclo:
-            vencimento = base_venc + relativedelta(months=1)
+        # Se a compra foi feita após o dia de fechamento, vai para o próximo ciclo
+        if data_compra.day > dia_fechamento:
+            # Próximo mês
+            if data_compra.month == 12:
+                return (data_compra.year + 1, 1)
+            else:
+                return (data_compra.year, data_compra.month + 1)
         else:
-            # Se foi DEPOIS do fechamento, vai para daqui a 2 meses
-            vencimento = base_venc + relativedelta(months=2)
-        
-        return (vencimento.year, vencimento.month)
+            # Mesmo mês
+            return (data_compra.year, data_compra.month)
 
 
     # ------------------------
