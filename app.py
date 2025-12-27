@@ -925,8 +925,19 @@ with tab_cartoes:
                     )
                     
                     col1, col2 = st.columns(2)
-                    with col1:
-                        descricao_compra = st.text_input("Descrição")
+                    with col1:               
+                        fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                        if fornecedores:
+                            descricao_compra = st.selectbox(
+                                "Descrição",
+                                options=[""] + fornecedores,
+                                format_func=lambda x: "Digite ou selecione..." if x == "" else x,
+                                key="desc_rapida_select"
+                            )
+                            if descricao_compra == "":
+                                descricao_compra = st.text_input("Ou digite nova descrição:", key="desc_rapida_text")
+                        else:
+                            descricao_compra = st.text_input("Descrição")
                     with col2:
                         categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     
@@ -939,8 +950,17 @@ with tab_cartoes:
                         data_compra_cartao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
                     
                     col6, col7 = st.columns(2)
+                    
                     with col6:
-                        tag_compra = st.text_input("TAG", placeholder="Ex: Viagem")
+                        tags_disponiveis = [""] + st.session_state.gerenciador.tags
+                        tag_compra = st.selectbox(
+                            "TAG (Opcional)",
+                            options=tags_disponiveis,
+                            format_func=lambda x: "Nenhuma" if x == "" else x,
+                            key="tag_rapida"
+                        )
+
+                    
                     with col7:
                         observacao_compra = st.text_input("Observação", placeholder="Opcional")
                     
@@ -971,14 +991,23 @@ with tab_cartoes:
                     # Lista as compras com opção de remover
                     for idx, compra in enumerate(st.session_state.compras_pendentes):
                         col_info, col_remove = st.columns([6, 1])
-                        
+                                                
                         with col_info:
                             parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
                             tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
+                            
+                            # Calcula o ciclo
+                            ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                                compra['id_cartao'], 
+                                compra['data_compra']
+                            )
+                            ciclo_txt = f"{mes_ciclo:02d}/{ano_ciclo}"
+                            
                             st.text(
                                 f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
                                 f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
-                                f"{compra['data_compra'].strftime('%d/%m/%Y')}{tag_txt}"
+                                f"{compra['data_compra'].strftime('%d/%m/%Y')} | "
+                                f"📅 Ciclo: {ciclo_txt}{tag_txt}"
                             )
                         
                         with col_remove:
@@ -992,11 +1021,23 @@ with tab_cartoes:
                     col_salvar, col_limpar = st.columns(2)
                     
                     with col_salvar:
+
                         if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
                             sucesso_total = 0
                             falhas = []
+                            ciclos_fechados = []
                             
                             for compra in st.session_state.compras_pendentes:
+                                # Verifica se o ciclo está fechado
+                                ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                                    compra["id_cartao"], 
+                                    compra["data_compra"]
+                                )
+                                
+                                if st.session_state.gerenciador.ciclo_esta_fechado(compra["id_cartao"], ano_ciclo, mes_ciclo):
+                                    ciclos_fechados.append(f"{compra['descricao']} (ciclo {mes_ciclo:02d}/{ano_ciclo} já fechado)")
+                                    continue
+                                
                                 sucesso = st.session_state.gerenciador.registrar_compra_cartao(
                                     id_cartao=compra["id_cartao"],
                                     descricao=compra["descricao"],
@@ -1012,6 +1053,17 @@ with tab_cartoes:
                                 else:
                                     falhas.append(compra["descricao"])
                             
+                            st.session_state.gerenciador.salvar_dados()
+                            
+                            if ciclos_fechados:
+                                st.error(f"❌ Não foi possível lançar em ciclos fechados:\n" + "\n".join(ciclos_fechados))
+                            if falhas:
+                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                            if sucesso_total > 0:
+                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
+                            
+                            st.session_state.compras_pendentes = []
+                            st.rerun()                       
                             st.session_state.gerenciador.salvar_dados()
                             
                             if falhas:
@@ -1039,14 +1091,31 @@ with tab_cartoes:
                         format_func=lambda cid: mapa_cartao[cid].nome,
                         key="purchase_cartao_id"
                     )
-                    descricao_compra = st.text_input("Descrição da Compra")
+                    fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                    if fornecedores:
+                        descricao_compra = st.selectbox(
+                            "Descrição da Compra",
+                            options=[""] + fornecedores,
+                            format_func=lambda x: "Digite ou selecione..." if x == "" else x,
+                            key="desc_individual_select"
+                        )
+                        if descricao_compra == "":
+                            descricao_compra = st.text_input("Ou digite nova descrição:", key="desc_individual_text")
+                    else:
+                        descricao_compra = st.text_input("Descrição da Compra")
+                   
                     categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
                     data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
                     num_parcelas = st.number_input("Número de Parcelas", min_value=1, value=1)
                     observacao_compra = st.text_area("Observações (Opcional)")
-                    tag_compra = st.text_input("TAG (Opcional)", placeholder="Ex: Viagem Matinhos 2025")
-                    
+                    tags_disponiveis = [""] + st.session_state.gerenciador.tags
+                    tag_compra = st.selectbox(
+                        "TAG (Opcional)",
+                        options=tags_disponiveis,
+                        format_func=lambda x: "Nenhuma" if x == "" else x,
+                        key="tag_individual"
+                    )    
                     if st.form_submit_button("Lançar Compra", use_container_width=True):
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("Preencha todos os detalhes da compra.")
@@ -1116,28 +1185,31 @@ with tab_cartoes:
                             if not aberto_do_ciclo:
                                 st.info("Nenhum lançamento em aberto para o ciclo selecionado.")
                             else:
-                                for compra in sorted(aberto_do_ciclo, key=lambda x: x.data_compra):
-                                    c1, c2 = st.columns([4, 1])
-                                    venc_str = compra.data_compra.strftime("%d/%m/%Y")
-                                    real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                    # Ordena por data da compra real
+                                    compras_ordenadas = sorted(aberto_do_ciclo, key=lambda x: getattr(x, "data_compra_real", x.data_compra))
                                     
-                                    # Monta descrição com observação inline
-                                    desc = f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}"
+                                    # Mostra vencimento apenas uma vez no topo
+                                    if compras_ordenadas:
+                                        primeiro_venc = compras_ordenadas[0].data_compra
+                                        st.markdown(f"**📅 Vencimento: {primeiro_venc.strftime('%d/%m/%Y')}** | **Total: {formatar_moeda(sum(c.valor for c in compras_ordenadas))}**")
+                                        st.divider()
                                     
-                                    c1.text(desc)
-                                    
-                                    # Exibe observação diretamente abaixo (se existir)
-                                    if getattr(compra, "observacao", None):
-                                        c1.caption(f"📝 {compra.observacao}")
-                                    
-                                    # Exibe TAG diretamente abaixo (se existir)
-                                    if getattr(compra, "tag", None):
-                                        c1.caption(f"🏷️ {compra.tag}")
-                                    
-                                    with c2:
-                                        if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra e suas parcelas"):
-                                            st.session_state.compra_para_excluir = compra.id_compra_original
-                                            st.rerun()
+                                    for compra in compras_ordenadas:
+                                        c1, c2 = st.columns([6, 1])
+                                        
+                                        real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
+                                        obs_txt = f" | 📝 {compra.observacao}" if getattr(compra, "observacao", None) else ""
+                                        tag_txt = f" | 🏷️ {compra.tag}" if getattr(compra, "tag", None) else ""
+                                        
+                                        # Tudo em uma linha
+                                        c1.markdown(f"<small>{real_str} | {compra.descricao} | {formatar_moeda(compra.valor)}{obs_txt}{tag_txt}</small>", unsafe_allow_html=True)
+                                        
+                                        with c2:
+                                            if st.button("🗑️", key=f"del_compra_{compra.id_compra}", help="Excluir esta compra"):
+                                                st.session_state.compra_para_excluir = compra.id_compra_original
+                                                st.rerun()
+
+        
 
                                     if st.session_state.compra_para_excluir == compra.id_compra_original:
                                         st.warning(f"Excluir '{compra.descricao}' e todas as suas parcelas?")
@@ -1178,18 +1250,19 @@ with tab_cartoes:
                             if not futuros:
                                 st.info("Nenhum lançamento futuro para este cartão.")
                             else:
-                                for compra in sorted(futuros, key=lambda x: (x.data_compra.year, x.data_compra.month, x.data_compra.day)):
+                                 # Ordena por vencimento e depois por data real
+                                futuros_ordenados = sorted(futuros, key=lambda x: (x.data_compra, getattr(x, "data_compra_real", x.data_compra)))
+                                
+                                for compra in futuros_ordenados:
                                     venc_str = compra.data_compra.strftime("%d/%m/%Y")
                                     real_str = getattr(compra, "data_compra_real", compra.data_compra).strftime("%d/%m/%Y")
-                                    st.text(f"Venc.: {venc_str} • Compra: {real_str} — {compra.descricao}: {formatar_moeda(compra.valor)}")
+                                    obs_txt = f" | 📝 {compra.observacao}" if getattr(compra, "observacao", None) else ""
+                                    tag_txt = f" | 🏷️ {compra.tag}" if getattr(compra, "tag", None) else ""
                                     
-                                    # Exibe observação diretamente abaixo (se existir)
-                                    if getattr(compra, "observacao", None):
-                                        st.caption(f"📝 {compra.observacao}")
-                                    
-                                    # Exibe TAG diretamente abaixo (se existir)
-                                    if getattr(compra, "tag", None):
-                                        st.caption(f"🏷️ {compra.tag}")
+                                    # Tudo em uma linha com vencimento
+                                    st.markdown(f"<small>📅 Venc: {venc_str} | {real_str} | {compra.descricao} | {formatar_moeda(compra.valor)}{obs_txt}{tag_txt}</small>", unsafe_allow_html=True)                       
+                                
+                                
                         with tab_fechadas:
                             if not faturas_fechadas:
                                 st.info("Nenhuma fatura fechada para este cartão.")
@@ -1402,6 +1475,65 @@ with tab_config:
                 st.session_state.gerenciador.salvar_dados()
                 st.toast(f"Categoria '{nome}' adicionada!")
                 st.rerun()
+
+
+    st.subheader("Gerenciar TAGs")
+        st.caption("TAGs são opcionais e servem para organizar transações e compras por projetos, viagens, eventos, etc.")
+        
+        col_tag1, col_tag2 = st.columns([3, 2])
+        
+        with col_tag1:
+            st.write("TAGs existentes:")
+            tags = st.session_state.gerenciador.tags
+            
+            if not tags:
+                st.info("Nenhuma TAG cadastrada.")
+            else:
+                for tag in tags:
+                    tag_col1, tag_col2 = st.columns([4, 1])
+                    
+                    tag_col1.write(f"🏷️ {tag}")
+                    
+                    if tag_col2.button("🗑️", key=f"del_tag_{tag}", help=f"Excluir TAG '{tag}'"):
+                        st.session_state.tag_para_excluir = tag
+                        st.rerun()
+                    
+                    if st.session_state.get("tag_para_excluir") == tag:
+                        st.warning(f"ATENÇÃO: Tem certeza que deseja excluir a TAG '{tag}'?")
+                        col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+                        
+                        with col_confirm:
+                            if st.button(
+                                "Sim, excluir",
+                                key=f"confirm_del_tag_{tag}",
+                                type="primary"
+                            ):
+                                st.session_state.gerenciador.remover_tag(tag)
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"TAG '{tag}' removida!")
+                                st.session_state.tag_para_excluir = None
+                                st.rerun()
+                        
+                        with col_cancel:
+                            if st.button("Cancelar", key=f"cancel_del_tag_{tag}"):
+                                st.session_state.tag_para_excluir = None
+                                st.rerun()
+        
+        with col_tag2:
+            st.write("Nova TAG")
+            nova_tag = st.text_input("Nome da TAG", key="nova_tag_input", placeholder="Ex: Viagem 2025")
+            if st.button("Adicionar TAG", key="add_tag_btn"):
+                nome = (nova_tag or "").strip()
+                if not nome:
+                    st.warning("Informe um nome para a TAG.")
+                elif nome in st.session_state.gerenciador.tags:
+                    st.info(f"A TAG '{nome}' já existe.")
+                else:
+                    st.session_state.gerenciador.adicionar_tag(nome)
+                    st.session_state.gerenciador.salvar_dados()
+                    st.toast(f"TAG '{nome}' adicionada!")
+                    st.rerun()
+
 
 # --- GERENCIAR CONTAS (ARQUIVAR/DESARQUIVAR) ---  ← ADICIONE AQUI (LOGO APÓS)
 with tab_gerenciar:
