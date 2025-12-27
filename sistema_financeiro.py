@@ -1313,6 +1313,13 @@ class GerenciadorContas:
             c for c in self.compras_cartao if c.id_compra_original != id_compra_original
         ]
 
+
+
+
+
+
+
+    
     def fechar_fatura(
         self,
         id_cartao: str,
@@ -1349,6 +1356,55 @@ class GerenciadorContas:
 
         return fatura
 
+    def fechar_fatura(
+        self, id_cartao: str, data_fechamento_real: date, data_vencimento_real: date
+    ) -> Optional[Fatura]:
+        """
+        Fecha a fatura do cartão para o ciclo correspondente à data de fechamento.
+        Registra a data real de fechamento como customizada para uso futuro.
+        """
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return None
+    
+        # Calcula o ciclo baseado na data de fechamento real
+        ano_ciclo = data_fechamento_real.year
+        mes_ciclo = data_fechamento_real.month
+    
+        # Busca compras em aberto deste ciclo
+        compras_do_ciclo = [
+            c for c in self.compras_cartao
+            if c.id_cartao == id_cartao
+            and c.data_compra.year == ano_ciclo
+            and c.data_compra.month == mes_ciclo
+            and not c.id_fatura
+        ]
+    
+        if not compras_do_ciclo:
+            return None
+    
+        valor_total = sum(c.valor for c in compras_do_ciclo)
+        nova_fatura = Fatura(
+            id_cartao=id_cartao,
+            data_fechamento=data_fechamento_real,
+            data_vencimento=data_vencimento_real,
+            valor_total=valor_total,
+            status="Fechada",
+        )
+        self.faturas.append(nova_fatura)
+    
+        # Vincula as compras à fatura
+        for compra in compras_do_ciclo:
+            compra.id_fatura = nova_fatura.id_fatura
+    
+        # ✅ ADICIONE ESTA PARTE: Registra o fechamento customizado se for diferente do padrão
+        if data_fechamento_real.day != cartao.dia_fechamento:
+            chave_mes = f"{ano_ciclo}-{mes_ciclo:02d}"
+            cartao.fechamentos_customizados[chave_mes] = data_fechamento_real.day
+            # Salva automaticamente (será salvo quando chamar salvar_dados no app.py)
+    
+        return nova_fatura
+ 
     def pagar_fatura(self, id_fatura: str, id_conta_pagamento: str, data_pagamento: date) -> bool:
         fatura = next((f for f in self.faturas if f.id_fatura == id_fatura), None)
         if not fatura or fatura.status == "Paga":
