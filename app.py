@@ -963,25 +963,35 @@ with tab_cartoes:
                     
                     with col7:
                         observacao_compra = st.text_input("Observação", placeholder="Opcional")
-                    
+
                     submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
                     
                     if submitted:
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("⚠️ Preencha descrição, categoria e valor.")
                         else:
-                            st.session_state.compras_pendentes.append({
-                                "id_cartao": cartao_selecionado_id,
-                                "cartao_nome": mapa_cartao[cartao_selecionado_id].nome,
-                                "descricao": descricao_compra,
-                                "valor_total": valor_compra,
-                                "data_compra": data_compra_cartao,
-                                "categoria": categoria_compra,
-                                "num_parcelas": num_parcelas,
-                                "observacao": observacao_compra,
-                                "tag": tag_compra,
-                            })
-                            st.session_state.contador_compras += 1
+                            # Valida se o ciclo está fechado ANTES de adicionar
+                            ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                                cartao_selecionado_id, 
+                                data_compra_cartao
+                            )
+                            
+                            if st.session_state.gerenciador.ciclo_esta_fechado(cartao_selecionado_id, ano_ciclo, mes_ciclo):
+                                cartao_nome = mapa_cartao[cartao_selecionado_id].nome
+                                st.error(f"❌ **Não é possível adicionar esta compra!**\n\nO ciclo **{mes_ciclo:02d}/{ano_ciclo}** do cartão **{cartao_nome}** já está fechado.\n\nPara lançar compras neste período, você precisa reabrir a fatura correspondente.")
+                            else:
+                                st.session_state.compras_pendentes.append({
+                                    "id_cartao": cartao_selecionado_id,
+                                    "cartao_nome": mapa_cartao[cartao_selecionado_id].nome,
+                                    "descricao": descricao_compra,
+                                    "valor_total": valor_compra,
+                                    "data_compra": data_compra_cartao,
+                                    "categoria": categoria_compra,
+                                    "num_parcelas": num_parcelas,
+                                    "observacao": observacao_compra,
+                                    "tag": tag_compra,
+                                })
+                                st.session_state.contador_compras += 1
                 
                 # Mostra compras pendentes
                 if st.session_state.compras_pendentes:
@@ -1025,20 +1035,32 @@ with tab_cartoes:
                         if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
                             sucesso_total = 0
                             falhas = []
-                            ciclos_fechados = []
                             
                             for compra in st.session_state.compras_pendentes:
-                                # Verifica se o ciclo está fechado
-                                ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
-                                    compra["id_cartao"], 
-                                    compra["data_compra"]
-                                )
-                                
-                                if st.session_state.gerenciador.ciclo_esta_fechado(compra["id_cartao"], ano_ciclo, mes_ciclo):
-                                    ciclos_fechados.append(f"{compra['descricao']} (ciclo {mes_ciclo:02d}/{ano_ciclo} já fechado)")
-                                    continue
-                                
                                 sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                                    id_cartao=compra["id_cartao"],
+                                    descricao=compra["descricao"],
+                                    valor_total=compra["valor_total"],
+                                    data_compra=compra["data_compra"],
+                                    categoria=compra["categoria"],
+                                    num_parcelas=compra["num_parcelas"],
+                                    observacao=compra["observacao"],
+                                    tag=compra["tag"],
+                                )
+                                if sucesso:
+                                    sucesso_total += 1
+                                else:
+                                    falhas.append(compra["descricao"])
+                            
+                            st.session_state.gerenciador.salvar_dados()
+                            
+                            if falhas:
+                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                            else:
+                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
+                            
+                            st.session_state.compras_pendentes = []
+                            st.rerun()   
                                     id_cartao=compra["id_cartao"],
                                     descricao=compra["descricao"],
                                     valor_total=compra["valor_total"],
@@ -1115,28 +1137,38 @@ with tab_cartoes:
                         options=tags_disponiveis,
                         format_func=lambda x: "Nenhuma" if x == "" else x,
                         key="tag_individual"
-                    )    
+                    )
+
                     if st.form_submit_button("Lançar Compra", use_container_width=True):
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("Preencha todos os detalhes da compra.")
                         else:
-                            sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                                id_cartao=cartao_selecionado_id,
-                                descricao=descricao_compra,
-                                valor_total=valor_compra,
-                                data_compra=data_compra_cartao,
-                                categoria=categoria_compra,
-                                num_parcelas=num_parcelas,
-                                observacao=observacao_compra,
-                                tag=tag_compra, 
+                            # Valida se o ciclo está fechado ANTES de tentar salvar
+                            ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                                cartao_selecionado_id, 
+                                data_compra_cartao
                             )
-                            if sucesso:
-                                st.session_state.gerenciador.salvar_dados()
-                                st.success("Compra registrada com sucesso!")
-                                st.rerun()
+                            
+                            if st.session_state.gerenciador.ciclo_esta_fechado(cartao_selecionado_id, ano_ciclo, mes_ciclo):
+                                cartao_nome = mapa_cartao[cartao_selecionado_id].nome
+                                st.error(f"❌ **Não é possível lançar esta compra!**\n\nO ciclo **{mes_ciclo:02d}/{ano_ciclo}** do cartão **{cartao_nome}** já está fechado.\n\nPara lançar compras neste período, você precisa reabrir a fatura correspondente.")
                             else:
-                                st.error("Falha ao registrar a compra.")
-        
+                                sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                                    id_cartao=cartao_selecionado_id,
+                                    descricao=descricao_compra,
+                                    valor_total=valor_compra,
+                                    data_compra=data_compra_cartao,
+                                    categoria=categoria_compra,
+                                    num_parcelas=num_parcelas,
+                                    observacao=observacao_compra,
+                                    tag=tag_compra, 
+                                )
+                                if sucesso:
+                                    st.session_state.gerenciador.salvar_dados()
+                                    st.success("Compra registrada com sucesso!")
+                                    st.rerun()
+                                else:
+                                    st.error("Falha ao registrar a compra.")
 
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
