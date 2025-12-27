@@ -946,27 +946,31 @@ with tab_cartoes:
             if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
                 chave = f"{ano_custom}-{mes_custom:02d}"
                 
-                st.write(f"🔍 DEBUG - Tipo do atributo: {type(cartao_config.fechamentos_customizados)}")
-                st.write(f"🔍 DEBUG - Conteúdo ANTES: {cartao_config.fechamentos_customizados}")
-                st.write(f"🔍 DEBUG - Chave a adicionar: {chave}")
-                st.write(f"🔍 DEBUG - Valor a adicionar: {dia_custom}")
-                
                 # Adiciona o fechamento
                 cartao_config.fechamentos_customizados[chave] = dia_custom
                 
-                st.write(f"🔍 DEBUG - Conteúdo DEPOIS: {cartao_config.fechamentos_customizados}")
+                st.write(f"✅ Adicionado: {chave} = {dia_custom}")
+                st.write(f"📋 Dicionário agora: {cartao_config.fechamentos_customizados}")
+                
+                # Verifica o para_dict
+                dict_cartao = cartao_config.para_dict()
+                st.write(f"📦 para_dict() retorna: {dict_cartao}")
                 
                 # Salva
-                st.session_state.gerenciador.salvar_dados()
+                resultado_salvar = st.session_state.gerenciador.salvar_dados()
+                st.write(f"💾 Resultado do salvar_dados(): {resultado_salvar}")
+                
+                # Mostra o conteúdo do arquivo JSON
+                import json
+                try:
+                    with open("dados_financeiros.json", "r", encoding="utf-8") as f:
+                        dados_json = json.load(f)
+                        st.write(f"📄 Conteúdo do JSON (cartões):")
+                        st.json(dados_json.get("cartoes_credito", []))
+                except Exception as e:
+                    st.error(f"Erro ao ler JSON: {e}")
                 
                 st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
-                
-                # Força recarregar do arquivo
-                st.session_state.gerenciador.carregar_dados()
-                
-                st.write(f"🔍 DEBUG - Após recarregar: {cartao_config.fechamentos_customizados}")
-                
-                st.rerun()
 
         st.divider()
         
