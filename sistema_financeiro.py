@@ -358,8 +358,29 @@ class GerenciadorContas:
             "categorias": self.categorias,
             "tags": self.tags, 
         }
-        with open(self.caminho_arquivo, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        try:
+            # Cria o diretório se não existir
+            diretorio = os.path.dirname(self.caminho_arquivo)
+            if diretorio and not os.path.exists(diretorio):
+                os.makedirs(diretorio)
+            
+            # Salva o arquivo
+            with open(self.caminho_arquivo, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+            
+            print(f"✅ Dados salvos com sucesso em: {os.path.abspath(self.caminho_arquivo)}")
+        except Exception as e:
+            print(f"❌ Erro ao salvar dados: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+
+
+
+
+    
+    
 
     def carregar_dados(self) -> None:
         if not os.path.exists(self.caminho_arquivo):
