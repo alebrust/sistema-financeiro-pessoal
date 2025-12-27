@@ -909,9 +909,12 @@ with tab_cartoes:
             st.write(f"**Dia de fechamento padrão:** {cartao_config.dia_fechamento}")
             
             # Exibe fechamentos customizados existentes
-            if cartao_config.fechamentos_customizados:
-                st.write("**Fechamentos customizados:**")
-                
+            st.write("**Fechamentos customizados:**")
+            
+            # Debug: mostra o conteúdo do dicionário
+            st.caption(f"Debug: {cartao_config.fechamentos_customizados}")
+            
+            if cartao_config.fechamentos_customizados and len(cartao_config.fechamentos_customizados) > 0:
                 for chave_mes, dia in sorted(cartao_config.fechamentos_customizados.items()):
                     col_mes, col_dia, col_del = st.columns([2, 2, 1])
                     
@@ -926,7 +929,7 @@ with tab_cartoes:
                         st.rerun()
             else:
                 st.info("Nenhum fechamento customizado configurado.")
-            
+
             st.write("**Adicionar fechamento customizado:**")
             
             col_ano, col_mes, col_dia = st.columns(3)
@@ -939,14 +942,22 @@ with tab_cartoes:
             
             with col_dia:
                 dia_custom = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=cartao_config.dia_fechamento, key="dia_fechamento_custom")
-            
+
             if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
                 chave = f"{ano_custom}-{mes_custom:02d}"
+                
+                # Debug: verifica o estado antes
+                st.write(f"DEBUG - Antes: {cartao_config.fechamentos_customizados}")
+                
                 cartao_config.fechamentos_customizados[chave] = dia_custom
+                
+                # Debug: verifica o estado depois
+                st.write(f"DEBUG - Depois: {cartao_config.fechamentos_customizados}")
+                
                 st.session_state.gerenciador.salvar_dados()
                 st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
                 st.rerun()
-        
+
         st.divider()
         
         st.subheader("Lançar Compra no Cartão")
