@@ -1023,19 +1023,18 @@ with tab_cartoes:
                         observacao_compra = st.text_input("Observação", placeholder="Opcional")
 
                     submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
-                    
+
                     if submitted:
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("⚠️ Preencha descrição, categoria e valor.")
                         else:
-                            # ✅ DEBUG - ADICIONE ESTAS LINHAS AQUI
-                                    debug_info = st.session_state.gerenciador.debug_ciclo(
-                                        cartao_selecionado_id, 
-                                        data_compra_cartao
-                                    )
-                                    st.info(debug_info)
-                                    # ← FIM DO DEBUG
-
+                            # DEBUG - Mostra informações do cálculo do ciclo
+                            debug_info = st.session_state.gerenciador.debug_ciclo(
+                                cartao_selecionado_id, 
+                                data_compra_cartao
+                            )
+                            st.info(debug_info)
+                            
                             # Valida se o ciclo está fechado ANTES de adicionar
                             ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
                                 cartao_selecionado_id, 
@@ -1058,6 +1057,7 @@ with tab_cartoes:
                                     "tag": tag_compra,
                                 })
                                 st.session_state.contador_compras += 1
+
                 
                 # Mostra compras pendentes
                 if st.session_state.compras_pendentes:
