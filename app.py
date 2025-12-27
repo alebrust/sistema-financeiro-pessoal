@@ -891,6 +891,64 @@ with tab_cartoes:
                     st.success(f"Cartão '{nome_cartao}' adicionado!")
                     st.rerun()
 
+                # === GERENCIAR FECHAMENTOS CUSTOMIZADOS ===
+        st.divider()
+        st.subheader("⚙️ Datas de Fechamento Customizadas")
+        st.caption("Configure datas de fechamento específicas para meses onde o banco altera o dia padrão (feriados, finais de semana, etc.)")
+        
+        if not st.session_state.gerenciador.cartoes_credito:
+            st.info("Adicione um cartão primeiro.")
+        else:
+            cartao_config = st.selectbox(
+                "Selecione o Cartão",
+                options=st.session_state.gerenciador.cartoes_credito,
+                format_func=lambda c: c.nome,
+                key="cartao_config_fechamento"
+            )
+            
+            st.write(f"**Dia de fechamento padrão:** {cartao_config.dia_fechamento}")
+            
+            # Exibe fechamentos customizados existentes
+            if cartao_config.fechamentos_customizados:
+                st.write("**Fechamentos customizados:**")
+                
+                for chave_mes, dia in sorted(cartao_config.fechamentos_customizados.items()):
+                    col_mes, col_dia, col_del = st.columns([2, 2, 1])
+                    
+                    ano, mes = chave_mes.split("-")
+                    col_mes.text(f"{mes}/{ano}")
+                    col_dia.text(f"Fecha dia {dia}")
+                    
+                    if col_del.button("🗑️", key=f"del_fechamento_{cartao_config.id_cartao}_{chave_mes}"):
+                        del cartao_config.fechamentos_customizados[chave_mes]
+                        st.session_state.gerenciador.salvar_dados()
+                        st.toast("Fechamento customizado removido!")
+                        st.rerun()
+            else:
+                st.info("Nenhum fechamento customizado configurado.")
+            
+            st.write("**Adicionar fechamento customizado:**")
+            
+            col_ano, col_mes, col_dia = st.columns(3)
+            
+            with col_ano:
+                ano_custom = st.number_input("Ano", min_value=2024, max_value=2030, value=datetime.today().year, key="ano_fechamento_custom")
+            
+            with col_mes:
+                mes_custom = st.number_input("Mês", min_value=1, max_value=12, value=datetime.today().month, key="mes_fechamento_custom")
+            
+            with col_dia:
+                dia_custom = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=cartao_config.dia_fechamento, key="dia_fechamento_custom")
+            
+            if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
+                chave = f"{ano_custom}-{mes_custom:02d}"
+                cartao_config.fechamentos_customizados[chave] = dia_custom
+                st.session_state.gerenciador.salvar_dados()
+                st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
+                st.rerun()
+        
+        st.divider()
+        
         st.subheader("Lançar Compra no Cartão")
         cartoes_cadastrados = st.session_state.gerenciador.cartoes_credito
         if not cartoes_cadastrados:
