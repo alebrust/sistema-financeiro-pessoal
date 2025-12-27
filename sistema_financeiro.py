@@ -1498,53 +1498,37 @@ class GerenciadorContas:
                 return True
         return False
     
+   
     def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
         """
         Calcula em qual ciclo (ano, mês) a compra cairá baseado na data de fechamento.
-        Retorna (ano, mes) do vencimento.
+        Retorna (ano, mes) do VENCIMENTO da fatura.
         """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return (data_compra.year, data_compra.month)
         
-        # Se a compra foi feita após o dia de fechamento, vai para o próximo ciclo
-        if data_compra.day > cartao.dia_fechamento:
-            # Próximo mês
-            if data_compra.month == 12:
-                return (data_compra.year + 1, 1)
-            else:
-                return (data_compra.year, data_compra.month + 1)
+        try:
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
+        except ValueError:
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
+        
+        try:
+            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
+        except ValueError:
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            base_venc = date(data_compra.year, data_compra.month, ultimo)
+        
+        # Se a compra foi ANTES ou NO dia do fechamento, vai para o próximo mês
+        if data_compra <= data_fechamento_ciclo:
+            vencimento = base_venc + relativedelta(months=1)
         else:
-            # Mesmo mês
-            return (data_compra.year, data_compra.month)
+            # Se foi DEPOIS do fechamento, vai para daqui a 2 meses
+            vencimento = base_venc + relativedelta(months=2)
+        
+        return (vencimento.year, vencimento.month)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-    
 
     # ------------------------
     # Arquivamento de Contas
