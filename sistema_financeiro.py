@@ -1271,22 +1271,19 @@ class GerenciadorContas:
 
      # ✅ ADICIONE ESTAS LINHAS AQUI (VALIDAÇÃO DE CICLO FECHADO)
         # Calcula em qual ciclo a primeira parcela cairá
-        try:
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
-        except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
+
+
+        # Usa o método calcular_ciclo_compra para determinar o ciclo correto
+        ano_ciclo, mes_ciclo = self.calcular_ciclo_compra(id_cartao, data_compra)
         
+        # Calcula a data de vencimento baseada no ciclo
         try:
-            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
+            vencimento_primeira = date(ano_ciclo, mes_ciclo, cartao.dia_vencimento)
         except ValueError:
-            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
-            base_venc = date(data_compra.year, data_compra.month, ultimo)
-        
-        if data_compra <= data_fechamento_ciclo:
-            vencimento_primeira = base_venc + relativedelta(months=1)
-        else:
-            vencimento_primeira = base_venc + relativedelta(months=2)
+            # Se o dia de vencimento não existe no mês (ex: 31 em fevereiro), usa o último dia
+            ultimo_dia = calendar.monthrange(ano_ciclo, mes_ciclo)[1]
+            vencimento_primeira = date(ano_ciclo, mes_ciclo, min(cartao.dia_vencimento, ultimo_dia))
+
         
         # Verifica se o ciclo da primeira parcela está fechado
         if self.ciclo_esta_fechado(id_cartao, vencimento_primeira.year, vencimento_primeira.month):
@@ -1506,28 +1503,41 @@ class GerenciadorContas:
     def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
         """
         Calcula em qual ciclo (ano, mês) a compra cairá baseado na data de fechamento.
+        
+        LÓGICA:
+        - Ciclo MM/AAAA abrange compras de (dia_fechamento + 1) do mês anterior até dia_fechamento do mês MM
+        - Exemplo: Fechamento dia 02, Ciclo 12/2025 = compras de 03/11/2025 até 02/12/2025
+        
         Retorna (ano, mes) do vencimento.
         """
         cartao = self.buscar_cartao_por_id(id_cartao)
         if not cartao:
             return (data_compra.year, data_compra.month)
         
-        # Verifica se há fechamento customizado para este mês
-        chave_mes = f"{data_compra.year}-{data_compra.month:02d}"
-        dia_fechamento = cartao.fechamentos_customizados.get(chave_mes, cartao.dia_fechamento)
+        # Calcula o mês/ano do ciclo testando se a compra está antes ou depois do fechamento
+        ano_teste = data_compra.year
+        mes_teste = data_compra.month
         
-        # Se a compra foi feita após o dia de fechamento, vai para o próximo ciclo
-        if data_compra.day > dia_fechamento:
-            # Próximo mês
-            if data_compra.month == 12:
-                return (data_compra.year + 1, 1)
+        # Verifica se há fechamento customizado para o mês atual
+        chave_mes_atual = f"{ano_teste}-{mes_teste:02d}"
+        dia_fechamento_atual = cartao.fechamentos_customizados.get(chave_mes_atual, cartao.dia_fechamento)
+        
+        # Se a compra foi feita APÓS o dia de fechamento do mês atual,
+        # ela entra no ciclo do PRÓXIMO mês
+        if data_compra.day > dia_fechamento_atual:
+            # Avança para o próximo mês
+            if mes_teste == 12:
+                ano_teste += 1
+                mes_teste = 1
             else:
-                return (data_compra.year, data_compra.month + 1)
-        else:
-            # Mesmo mês
-            return (data_compra.year, data_compra.month)
+                mes_teste += 1
+        
+        # Se a compra foi feita ATÉ o dia de fechamento,
+        # ela entra no ciclo do MÊS ATUAL
+        
+        return (ano_teste, mes_teste)
 
-
+    
     # ------------------------
     # Arquivamento de Contas
     # ------------------------
