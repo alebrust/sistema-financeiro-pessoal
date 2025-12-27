@@ -946,16 +946,26 @@ with tab_cartoes:
             if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
                 chave = f"{ano_custom}-{mes_custom:02d}"
                 
-                # Debug: verifica o estado antes
-                st.write(f"DEBUG - Antes: {cartao_config.fechamentos_customizados}")
+                st.write(f"🔍 DEBUG - Tipo do atributo: {type(cartao_config.fechamentos_customizados)}")
+                st.write(f"🔍 DEBUG - Conteúdo ANTES: {cartao_config.fechamentos_customizados}")
+                st.write(f"🔍 DEBUG - Chave a adicionar: {chave}")
+                st.write(f"🔍 DEBUG - Valor a adicionar: {dia_custom}")
                 
+                # Adiciona o fechamento
                 cartao_config.fechamentos_customizados[chave] = dia_custom
                 
-                # Debug: verifica o estado depois
-                st.write(f"DEBUG - Depois: {cartao_config.fechamentos_customizados}")
+                st.write(f"🔍 DEBUG - Conteúdo DEPOIS: {cartao_config.fechamentos_customizados}")
                 
+                # Salva
                 st.session_state.gerenciador.salvar_dados()
+                
                 st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
+                
+                # Força recarregar do arquivo
+                st.session_state.gerenciador.carregar_dados()
+                
+                st.write(f"🔍 DEBUG - Após recarregar: {cartao_config.fechamentos_customizados}")
+                
                 st.rerun()
 
         st.divider()
