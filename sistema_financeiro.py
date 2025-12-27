@@ -333,6 +333,7 @@ class GerenciadorContas:
             "Investimentos",
             "Outros",
         ]
+        self.tags: List[str] = []  
         # Cache de cotações
         self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
         self._cotacoes_ttl: int = 60  # segundos
@@ -352,6 +353,7 @@ class GerenciadorContas:
             "compras_cartao": [c.para_dict() for c in self.compras_cartao],
             "faturas": [f.para_dict() for f in self.faturas],
             "categorias": self.categorias,
+            "tags": self.tags, 
         }
         with open(self.caminho_arquivo, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -464,6 +466,8 @@ class GerenciadorContas:
         cats = data.get("categorias")
         if isinstance(cats, list) and cats:
             self.categorias = cats
+
+        self.tags = data.get("tags", [])
 
     # ------------------------
     # Utilidades de Ciclos (Cartões)
@@ -1260,6 +1264,33 @@ class GerenciadorContas:
         if not cartao:
             return False
 
+
+     # ✅ ADICIONE ESTAS LINHAS AQUI (VALIDAÇÃO DE CICLO FECHADO)
+        # Calcula em qual ciclo a primeira parcela cairá
+        try:
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, cartao.dia_fechamento)
+        except ValueError:
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            data_fechamento_ciclo = date(data_compra.year, data_compra.month, ultimo)
+        
+        try:
+            base_venc = date(data_compra.year, data_compra.month, cartao.dia_vencimento)
+        except ValueError:
+            ultimo = calendar.monthrange(data_compra.year, data_compra.month)[1]
+            base_venc = date(data_compra.year, data_compra.month, ultimo)
+        
+        if data_compra <= data_fechamento_ciclo:
+            vencimento_primeira = base_venc + relativedelta(months=1)
+        else:
+            vencimento_primeira = base_venc + relativedelta(months=2)
+        
+        # Verifica se o ciclo da primeira parcela está fechado
+        if self.ciclo_esta_fechado(id_cartao, vencimento_primeira.year, vencimento_primeira.month):
+            return False  # Não permite lançar em ciclo fechado
+        # ← FIM DA VALIDAÇÃO
+
+
+
         valor_parcela = round(float(valor_total) / int(num_parcelas), 2)
         id_compra_original = str(uuid4())
 
@@ -1428,6 +1459,92 @@ class GerenciadorContas:
 
     def remover_categoria(self, nome: str) -> None:
         self.categorias = [c for c in self.categorias if c != nome]
+
+
+    # ------------------------
+    # Fornecedores únicos
+    # ------------------------
+
+    def obter_fornecedores_unicos(self) -> list:
+        """Retorna lista única de descrições de compras de cartão já lançadas"""
+        fornecedores = set()
+        for compra in self.compras_cartao:
+            if compra.descricao:
+                fornecedores.add(compra.descricao.strip())
+        return sorted(list(fornecedores))
+    
+    def adicionar_tag(self, nome_tag: str) -> bool:
+        """Adiciona uma nova TAG ao cadastro"""
+        nome_tag = nome_tag.strip()
+        if nome_tag and nome_tag not in self.tags:
+            self.tags.append(nome_tag)
+            self.tags.sort()
+            return True
+        return False
+    
+    def remover_tag(self, nome_tag: str) -> bool:
+        """Remove uma TAG do cadastro"""
+        if nome_tag in self.tags:
+            self.tags.remove(nome_tag)
+            return True
+        return False
+    
+    def ciclo_esta_fechado(self, id_cartao: str, ano: int, mes: int) -> bool:
+        """Verifica se o ciclo já tem fatura fechada"""
+        for fatura in self.faturas:
+            if (fatura.id_cartao == id_cartao and 
+                fatura.data_vencimento.year == ano and 
+                fatura.data_vencimento.month == mes):
+                return True
+        return False
+    
+    def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
+        """
+        Calcula em qual ciclo (ano, mês) a compra cairá baseado na data de fechamento.
+        Retorna (ano, mes) do vencimento.
+        """
+        cartao = self.buscar_cartao_por_id(id_cartao)
+        if not cartao:
+            return (data_compra.year, data_compra.month)
+        
+        # Se a compra foi feita após o dia de fechamento, vai para o próximo ciclo
+        if data_compra.day > cartao.dia_fechamento:
+            # Próximo mês
+            if data_compra.month == 12:
+                return (data_compra.year + 1, 1)
+            else:
+                return (data_compra.year, data_compra.month + 1)
+        else:
+            # Mesmo mês
+            return (data_compra.year, data_compra.month)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+    
 
     # ------------------------
     # Arquivamento de Contas
