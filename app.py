@@ -1028,6 +1028,14 @@ with tab_cartoes:
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("⚠️ Preencha descrição, categoria e valor.")
                         else:
+                            # ✅ DEBUG - ADICIONE ESTAS LINHAS AQUI
+                                    debug_info = st.session_state.gerenciador.debug_ciclo(
+                                        cartao_selecionado_id, 
+                                        data_compra_cartao
+                                    )
+                                    st.info(debug_info)
+                                    # ← FIM DO DEBUG
+
                             # Valida se o ciclo está fechado ANTES de adicionar
                             ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
                                 cartao_selecionado_id, 
