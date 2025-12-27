@@ -1031,7 +1031,6 @@ with tab_cartoes:
                     col_salvar, col_limpar = st.columns(2)
                     
                     with col_salvar:
-
                         if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
                             sucesso_total = 0
                             falhas = []
@@ -1052,40 +1051,6 @@ with tab_cartoes:
                                 else:
                                     falhas.append(compra["descricao"])
                             
-                            st.session_state.gerenciador.salvar_dados()
-                            
-                            if falhas:
-                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
-                            else:
-                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
-                            
-                            st.session_state.compras_pendentes = []
-                            st.rerun()   
-                                    id_cartao=compra["id_cartao"],
-                                    descricao=compra["descricao"],
-                                    valor_total=compra["valor_total"],
-                                    data_compra=compra["data_compra"],
-                                    categoria=compra["categoria"],
-                                    num_parcelas=compra["num_parcelas"],
-                                    observacao=compra["observacao"],
-                                    tag=compra["tag"],
-                                )
-                                if sucesso:
-                                    sucesso_total += 1
-                                else:
-                                    falhas.append(compra["descricao"])
-                            
-                            st.session_state.gerenciador.salvar_dados()
-                            
-                            if ciclos_fechados:
-                                st.error(f"❌ Não foi possível lançar em ciclos fechados:\n" + "\n".join(ciclos_fechados))
-                            if falhas:
-                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
-                            if sucesso_total > 0:
-                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
-                            
-                            st.session_state.compras_pendentes = []
-                            st.rerun()                       
                             st.session_state.gerenciador.salvar_dados()
                             
                             if falhas:
@@ -1169,7 +1134,6 @@ with tab_cartoes:
                                     st.rerun()
                                 else:
                                     st.error("Falha ao registrar a compra.")
-
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
         cartoes = st.session_state.gerenciador.cartoes_credito
