@@ -921,10 +921,7 @@ with tab_cartoes:
             
             # Exibe fechamentos customizados existentes
             st.write("**Fechamentos customizados:**")
-            
-            # Debug: mostra o conteúdo do dicionário
-            st.caption(f"Debug: {cartao_config.fechamentos_customizados}")
-            
+                            
             if cartao_config.fechamentos_customizados and len(cartao_config.fechamentos_customizados) > 0:
                 for chave_mes, dia in sorted(cartao_config.fechamentos_customizados.items()):
                     col_mes, col_dia, col_del = st.columns([2, 2, 1])
