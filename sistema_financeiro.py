@@ -2,6 +2,7 @@ import json
 import os
 import calendar
 import time
+import re
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from datetime import date, datetime, timedelta
@@ -1519,13 +1520,24 @@ class GerenciadorContas:
     # Fornecedores únicos
     # ------------------------
 
-    def obter_fornecedores_unicos(self) -> list:
-        """Retorna lista única de descrições de compras de cartão já lançadas"""
-        fornecedores = set()
-        for compra in self.compras_cartao:
-            if compra.descricao:
-                fornecedores.add(compra.descricao.strip())
-        return sorted(list(fornecedores))
+    def obter_fornecedores_unicos(self) -> List[str]:
+        """Retorna lista única de descrições de compras anteriores, removendo informações de parcelas"""
+        import re
+        
+        descricoes_brutas = [c.descricao for c in self.compras_cartao]
+        
+        # Remove padrões de parcelas: (1/2), (2/3), [1/2], 1/2, etc.
+        descricoes_limpas = []
+        for desc in descricoes_brutas:
+            # Remove padrões como: (1/2), [1/2], 1/2, (parcela 1 de 2), etc.
+            desc_limpa = re.sub(r'\s*[\(\[]?\d+\s*/\s*\d+[\)\]]?\s*$', '', desc)
+            desc_limpa = re.sub(r'\s*[\(\[](parcela\s*)?\d+\s*(de|/)?\s*\d+[\)\]]\s*', '', desc_limpa, flags=re.IGNORECASE)
+            desc_limpa = desc_limpa.strip()
+            if desc_limpa:
+                descricoes_limpas.append(desc_limpa)
+        
+        # Remove duplicatas e ordena alfabeticamente
+        return sorted(list(set(descricoes_limpas)))
     
     def adicionar_tag(self, nome_tag: str) -> bool:
         """Adiciona uma nova TAG ao cadastro"""
