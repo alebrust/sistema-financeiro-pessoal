@@ -911,13 +911,25 @@ with tab_cartoes:
         if not st.session_state.gerenciador.cartoes_credito:
             st.info("Adicione um cartão primeiro.")
         else:
-            cartao_config = st.selectbox(
-                "Selecione o Cartão",
-                options=st.session_state.gerenciador.cartoes_credito,
-                format_func=lambda c: c.nome,
-                key="cartao_config_fechamento"
-            )
-            
+
+            # Usa índice ao invés de objeto direto
+            cartoes_disponiveis = st.session_state.gerenciador.cartoes_credito
+            if not cartoes_disponiveis:
+                st.info("Adicione um cartão primeiro.")
+            else:
+                # Cria mapeamento de nome para índice
+                nomes_cartoes = [c.nome for c in cartoes_disponiveis]
+                
+                cartao_selecionado_nome = st.selectbox(
+                    "Selecione o Cartão",
+                    options=nomes_cartoes,
+                    key="cartao_config_fechamento"
+                )
+                
+                # Busca o índice do cartão selecionado
+                idx_cartao = nomes_cartoes.index(cartao_selecionado_nome)
+                cartao_config = cartoes_disponiveis[idx_cartao]
+
             st.write(f"**Dia de fechamento padrão:** {cartao_config.dia_fechamento}")
             
             # Exibe fechamentos customizados existentes
@@ -933,12 +945,13 @@ with tab_cartoes:
                     ano, mes = chave_mes.split("-")
                     col_mes.text(f"{mes}/{ano}")
                     col_dia.text(f"Fecha dia {dia}")
-                    
+
                     if col_del.button("🗑️", key=f"del_fechamento_{cartao_config.id_cartao}_{chave_mes}"):
-                        del cartao_config.fechamentos_customizados[chave_mes]
+                        del st.session_state.gerenciador.cartoes_credito[idx_cartao].fechamentos_customizados[chave_mes]
                         st.session_state.gerenciador.salvar_dados()
                         st.toast("Fechamento customizado removido!")
                         st.rerun()
+
             else:
                 st.info("Nenhum fechamento customizado configurado.")
 
@@ -956,45 +969,16 @@ with tab_cartoes:
                 dia_custom = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=cartao_config.dia_fechamento, key="dia_fechamento_custom")
 
             if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
-                import os
-                
                 chave = f"{ano_custom}-{mes_custom:02d}"
                 
-                # Adiciona o fechamento
-                cartao_config.fechamentos_customizados[chave] = dia_custom
+                # Modifica diretamente o cartão na lista do gerenciador
+                st.session_state.gerenciador.cartoes_credito[idx_cartao].fechamentos_customizados[chave] = dia_custom
                 
                 st.write(f"✅ Adicionado: {chave} = {dia_custom}")
-                st.write(f"📋 Dicionário agora: {cartao_config.fechamentos_customizados}")
-                
-                # Verifica o para_dict
-                dict_cartao = cartao_config.para_dict()
-                st.write(f"📦 para_dict() retorna: {dict_cartao}")
-                
-                # Mostra o caminho do arquivo (CORRIGIDO)
-                arquivo_path = st.session_state.gerenciador.caminho_arquivo
-                arquivo_absoluto = os.path.abspath(arquivo_path)
-                st.write(f"📁 Caminho do arquivo: {arquivo_absoluto}")
-                st.write(f"📄 Arquivo existe? {os.path.exists(arquivo_absoluto)}")
+                st.write(f"📋 Dicionário agora: {st.session_state.gerenciador.cartoes_credito[idx_cartao].fechamentos_customizados}")
                 
                 # Salva
                 st.session_state.gerenciador.salvar_dados()
-                
-                # Verifica se foi salvo
-                st.write(f"📄 Arquivo existe agora? {os.path.exists(arquivo_absoluto)}")
-                
-                # Tenta ler o arquivo CORRETO
-                try:
-                    with open(arquivo_absoluto, "r", encoding="utf-8") as f:
-                        dados_json = json.load(f)
-                        st.write(f"📄 Conteúdo do JSON (cartões):")
-                        
-                        # Mostra apenas o cartão atual
-                        for cartao_json in dados_json.get("cartoes_credito", []):
-                            if cartao_json.get("id_cartao") == cartao_config.id_cartao:
-                                st.json(cartao_json)
-                                break
-                except Exception as e:
-                    st.error(f"Erro ao ler JSON: {e}")
                 
                 st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
                 st.rerun()
