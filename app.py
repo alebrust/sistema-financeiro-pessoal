@@ -11,19 +11,6 @@ from sistema_financeiro import (
     CartaoCredito,
 )
 
-# ✅ ADICIONE ESTAS LINHAS AQUI:
-import os
-
-# Debug: mostra o diretório atual e arquivos
-st.sidebar.write("🔍 **DEBUG DO SISTEMA:**")
-st.sidebar.write(f"📁 Diretório atual: {os.getcwd()}")
-st.sidebar.write(f"📄 Arquivos no diretório:")
-arquivos = os.listdir(".")
-st.sidebar.write(arquivos)
-
-# ← FIM DO DEBUG
-
-
 def formatar_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -973,10 +960,7 @@ with tab_cartoes:
                 
                 # Modifica diretamente o cartão na lista do gerenciador
                 st.session_state.gerenciador.cartoes_credito[idx_cartao].fechamentos_customizados[chave] = dia_custom
-                
-                st.write(f"✅ Adicionado: {chave} = {dia_custom}")
-                st.write(f"📋 Dicionário agora: {st.session_state.gerenciador.cartoes_credito[idx_cartao].fechamentos_customizados}")
-                
+                                                
                 # Salva
                 st.session_state.gerenciador.salvar_dados()
                 
@@ -1063,13 +1047,7 @@ with tab_cartoes:
                     if submitted:
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("⚠️ Preencha descrição, categoria e valor.")
-                        else:
-                            debug_info = st.session_state.gerenciador.debug_ciclo(
-                                cartao_selecionado_id, 
-                                data_compra_cartao
-                            )
-                            st.info(debug_info)
-                            
+                        else:                          
                             ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
                                 cartao_selecionado_id, 
                                 data_compra_cartao
