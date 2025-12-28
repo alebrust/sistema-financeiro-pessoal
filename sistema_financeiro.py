@@ -1629,3 +1629,35 @@ class GerenciadorContas:
     def obter_contas_arquivadas(self) -> List[Conta]:
         """Retorna apenas contas arquivadas"""
         return [c for c in self.contas if c.arquivada]
+
+
+
+#-------------------------------
+# importar fornecedores
+#-------------------------------
+
+    def importar_fornecedores_de_lista(self, lista_fornecedores: List[str]) -> tuple[int, int]:
+        """
+        Importa fornecedores de uma lista.
+        Retorna (novos_adicionados, duplicados_ignorados)
+        """
+        novos = 0
+        duplicados = 0
+        
+        for fornecedor in lista_fornecedores:
+            fornecedor_limpo = fornecedor.strip()
+            
+            if not fornecedor_limpo:
+                continue
+                
+            if fornecedor_limpo not in self.fornecedores:
+                self.fornecedores.append(fornecedor_limpo)
+                novos += 1
+            else:
+                duplicados += 1
+        
+        # Ordena a lista
+        self.fornecedores.sort()
+        
+        return novos, duplicados
+
