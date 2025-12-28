@@ -998,23 +998,91 @@ with tab_cartoes:
                         options=ids_cartao,
                         format_func=lambda cid: mapa_cartao[cid].nome,
                     )
+
+            with tab_rapido:
+                st.info("💡 **Modo Rápido:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
+                
+                # Inicializa lista de compras pendentes
+                if "compras_pendentes" not in st.session_state:
+                    st.session_state.compras_pendentes = []
+                
+                # Contador para gerar keys únicas
+                if "contador_compras" not in st.session_state:
+                    st.session_state.contador_compras = 0
+                
+                # === SELEÇÃO DE FORNECEDOR (FORA DO FORMULÁRIO) ===
+                st.write("**Selecione o fornecedor:**")
+                
+                col_select, col_add = st.columns([5, 1])
+                
+                with col_select:
+                    fornecedores = st.session_state.gerenciador.obter_fornecedores()
+                    
+                    if fornecedores:
+                        fornecedor_selecionado = st.selectbox(
+                            "Descrição/Fornecedor",
+                            options=fornecedores,
+                            key="select_desc_rapida"
+                        )
+                    else:
+                        st.warning("⚠️ Nenhum fornecedor cadastrado. Use o botão + para adicionar.")
+                        fornecedor_selecionado = ""
+                
+                with col_add:
+                    st.write("")  # Espaçamento para alinhar
+                    if st.button("➕", key="add_forn_rapido", help="Adicionar novo fornecedor"):
+                        st.session_state.mostrar_add_fornecedor_rapido = True
+                        st.rerun()
+                
+                # Modal para adicionar fornecedor
+                if st.session_state.get("mostrar_add_fornecedor_rapido", False):
+                    novo_fornecedor = st.text_input(
+                        "Nome do novo fornecedor:",
+                        key="input_novo_forn_rapido",
+                        placeholder="Ex: Supermercado XYZ"
+                    )
+                    
+                    col_salvar, col_cancelar = st.columns(2)
+                    
+                    with col_salvar:
+                        if st.button("✅ Salvar", key="salvar_novo_forn_rapido", type="primary"):
+                            if novo_fornecedor.strip():
+                                if st.session_state.gerenciador.adicionar_fornecedor(novo_fornecedor):
+                                    st.session_state.gerenciador.salvar_dados()
+                                    st.toast(f"Fornecedor '{novo_fornecedor}' adicionado!")
+                                    st.session_state.mostrar_add_fornecedor_rapido = False
+                                    st.rerun()
+                                else:
+                                    st.warning("Fornecedor já existe!")
+                            else:
+                                st.warning("Digite um nome válido!")
+                    
+                    with col_cancelar:
+                        if st.button("❌ Cancelar", key="cancelar_novo_forn_rapido"):
+                            st.session_state.mostrar_add_fornecedor_rapido = False
+                            st.rerun()
+                
+                st.divider()
+                
+                # === FORMULÁRIO DE COMPRA ===
+                with st.form("form_rapido_compras", clear_on_submit=True):
+                    st.write("**Dados da Compra:**")
+                    
+                    cartao_selecionado_id = st.selectbox(
+                        "Cartão",
+                        options=ids_cartao,
+                        format_func=lambda cid: mapa_cartao[cid].nome,
+                    )
                     
                     col1, col2 = st.columns(2)
                     with col1:
-                        # Campo de texto simples com datalist (autocomplete nativo do HTML)
-                        fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
-                        
-                        # Cria um selectbox que permite digitação livre
+                        # Usa o fornecedor selecionado fora do formulário
                         descricao_compra = st.text_input(
-                            "Descrição/Fornecedor",
-                            placeholder="Digite o nome do fornecedor...",
-                            help="💡 Digite livremente. Fornecedores anteriores aparecerão como sugestão.",
-                            key="desc_rapida"
+                            "Descrição",
+                            value=fornecedor_selecionado,
+                            placeholder="Confirme ou edite a descrição",
+                            key="desc_rapida_form"
                         )
-                        
-                        # Mostra fornecedores recentes como referência (apenas visual)
-                        if fornecedores:
-                            st.caption(f"📋 Últimos usados: {', '.join(fornecedores[:5])}")
                     
                     with col2:
                         categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
@@ -1144,10 +1212,68 @@ with tab_cartoes:
                 else:
                     st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
 
+
             with tab_individual:
                 st.info("📝 **Modo Individual:** Cada compra é salva imediatamente após o envio.")
                 
+                # === SELEÇÃO DE FORNECEDOR (FORA DO FORMULÁRIO) ===
+                st.write("**Selecione o fornecedor:**")
+                
+                col_select, col_add = st.columns([5, 1])
+                
+                with col_select:
+                    fornecedores = st.session_state.gerenciador.obter_fornecedores()
+                    
+                    if fornecedores:
+                        fornecedor_selecionado = st.selectbox(
+                            "Descrição da Compra",
+                            options=fornecedores,
+                            key="select_desc_individual"
+                        )
+                    else:
+                        st.warning("⚠️ Nenhum fornecedor cadastrado. Use o botão + para adicionar.")
+                        fornecedor_selecionado = ""
+                
+                with col_add:
+                    st.write("")  # Espaçamento para alinhar
+                    if st.button("➕", key="add_forn_individual", help="Adicionar novo fornecedor"):
+                        st.session_state.mostrar_add_fornecedor_individual = True
+                        st.rerun()
+                
+                # Modal para adicionar fornecedor
+                if st.session_state.get("mostrar_add_fornecedor_individual", False):
+                    novo_fornecedor = st.text_input(
+                        "Nome do novo fornecedor:",
+                        key="input_novo_forn_individual",
+                        placeholder="Ex: Supermercado XYZ"
+                    )
+                    
+                    col_salvar, col_cancelar = st.columns(2)
+                    
+                    with col_salvar:
+                        if st.button("✅ Salvar", key="salvar_novo_forn_individual", type="primary"):
+                            if novo_fornecedor.strip():
+                                if st.session_state.gerenciador.adicionar_fornecedor(novo_fornecedor):
+                                    st.session_state.gerenciador.salvar_dados()
+                                    st.toast(f"Fornecedor '{novo_fornecedor}' adicionado!")
+                                    st.session_state.mostrar_add_fornecedor_individual = False
+                                    st.rerun()
+                                else:
+                                    st.warning("Fornecedor já existe!")
+                            else:
+                                st.warning("Digite um nome válido!")
+                    
+                    with col_cancelar:
+                        if st.button("❌ Cancelar", key="cancelar_novo_forn_individual"):
+                            st.session_state.mostrar_add_fornecedor_individual = False
+                            st.rerun()
+                
+                st.divider()
+                
+                # === FORMULÁRIO DE COMPRA ===
                 with st.form("add_card_purchase_form", clear_on_submit=True):
+                    st.write("**Dados da Compra:**")
+                    
                     cartao_selecionado_id = st.selectbox(
                         "Cartão Utilizado",
                         options=ids_cartao,
@@ -1155,19 +1281,14 @@ with tab_cartoes:
                         key="purchase_cartao_id"
                     )
                     
-                    # Campo de texto simples
-                    fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                    # Usa o fornecedor selecionado fora do formulário
                     descricao_compra = st.text_input(
-                        "Descrição da Compra",
-                        placeholder="Digite o nome do fornecedor...",
-                        help="💡 Digite livremente. Fornecedores anteriores aparecerão como sugestão.",
-                        key="desc_individual"
+                        "Descrição (confirmação)",
+                        value=fornecedor_selecionado,
+                        placeholder="Confirme ou edite a descrição",
+                        key="desc_individual_form"
                     )
                     
-                    # Mostra fornecedores recentes como referência
-                    if fornecedores:
-                        st.caption(f"📋 Últimos usados: {', '.join(fornecedores[:5])}")
-                   
                     categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
                     data_compra_cartao = st.date_input("Data da Compra", value=datetime.today(), format="DD/MM/YYYY")
@@ -1211,6 +1332,7 @@ with tab_cartoes:
                                     st.rerun()
                                 else:
                                     st.error("Falha ao registrar a compra.")
+
 
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
@@ -1592,6 +1714,60 @@ with tab_config:
                 st.session_state.gerenciador.adicionar_tag(nome)
                 st.session_state.gerenciador.salvar_dados()
                 st.toast(f"TAG '{nome}' adicionada!")
+                st.rerun()
+
+
+    st.divider()
+    st.subheader("Gerenciar Fornecedores")
+    st.caption("Cadastre os fornecedores que você utiliza com frequência para facilitar o lançamento de compras.")
+    
+    col_forn1, col_forn2 = st.columns([3, 2])
+    
+    with col_forn1:
+        st.write("Fornecedores cadastrados:")
+        fornecedores = st.session_state.gerenciador.fornecedores
+    
+        if not fornecedores:
+            st.info("Nenhum fornecedor cadastrado.")
+        else:
+            for fornecedor in fornecedores:
+                forn_col1, forn_col2 = st.columns([4, 1])
+                forn_col1.write(f"🏪 {fornecedor}")
+    
+                if forn_col2.button("🗑️", key=f"del_forn_{fornecedor}", help=f"Excluir fornecedor '{fornecedor}'"):
+                    st.session_state.fornecedor_para_excluir = fornecedor
+                    st.rerun()
+    
+                if st.session_state.get("fornecedor_para_excluir") == fornecedor:
+                    st.warning(f"ATENÇÃO: Tem certeza que deseja excluir o fornecedor '{fornecedor}'?")
+                    col_confirm, col_cancel, _ = st.columns([1, 1, 3])
+    
+                    with col_confirm:
+                        if st.button("Sim, excluir", key=f"confirm_del_forn_{fornecedor}", type="primary"):
+                            st.session_state.gerenciador.remover_fornecedor(fornecedor)
+                            st.session_state.gerenciador.salvar_dados()
+                            st.toast(f"Fornecedor '{fornecedor}' removido!")
+                            st.session_state.fornecedor_para_excluir = None
+                            st.rerun()
+    
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_del_forn_{fornecedor}"):
+                            st.session_state.fornecedor_para_excluir = None
+                            st.rerun()
+    
+    with col_forn2:
+        st.write("Novo fornecedor")
+        novo_forn = st.text_input("Nome do fornecedor", key="novo_fornecedor_input", placeholder="Ex: Supermercado XYZ")
+        if st.button("Adicionar fornecedor", key="add_fornecedor_btn"):
+            nome = (novo_forn or "").strip()
+            if not nome:
+                st.warning("Informe um nome para o fornecedor.")
+            elif nome in st.session_state.gerenciador.fornecedores:
+                st.info(f"O fornecedor '{nome}' já existe.")
+            else:
+                st.session_state.gerenciador.adicionar_fornecedor(nome)
+                st.session_state.gerenciador.salvar_dados()
+                st.toast(f"Fornecedor '{nome}' adicionado!")
                 st.rerun()
 
 
