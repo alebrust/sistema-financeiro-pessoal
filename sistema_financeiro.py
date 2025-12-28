@@ -1621,27 +1621,3 @@ class GerenciadorContas:
     def obter_contas_arquivadas(self) -> List[Conta]:
         """Retorna apenas contas arquivadas"""
         return [c for c in self.contas if c.arquivada]
-
-
-
-
-
-
-    def debug_ciclo(self, id_cartao: str, data_compra: date):
-        """Método temporário para debug"""
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao:
-            return "Cartão não encontrado"
-        
-        chave_mes = f"{data_compra.year}-{data_compra.month:02d}"
-        dia_fechamento = cartao.fechamentos_customizados.get(chave_mes, cartao.dia_fechamento)
-        
-        ano_ciclo, mes_ciclo = self.calcular_ciclo_compra(id_cartao, data_compra)
-        
-        return f"""
-        Data da compra: {data_compra.strftime('%d/%m/%Y')}
-        Dia de fechamento: {dia_fechamento}
-        Dia da compra: {data_compra.day}
-        Compra APÓS fechamento? {data_compra.day > dia_fechamento}
-        Ciclo calculado: {mes_ciclo:02d}/{ano_ciclo}
-        """
