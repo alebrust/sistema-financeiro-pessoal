@@ -956,6 +956,8 @@ with tab_cartoes:
                 dia_custom = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=cartao_config.dia_fechamento, key="dia_fechamento_custom")
 
             if st.button("Adicionar Fechamento Customizado", key="add_fechamento_custom"):
+                import os
+                
                 chave = f"{ano_custom}-{mes_custom:02d}"
                 
                 # Adiciona o fechamento
@@ -968,21 +970,34 @@ with tab_cartoes:
                 dict_cartao = cartao_config.para_dict()
                 st.write(f"📦 para_dict() retorna: {dict_cartao}")
                 
-                # Salva
-                resultado_salvar = st.session_state.gerenciador.salvar_dados()
-                st.write(f"💾 Resultado do salvar_dados(): {resultado_salvar}")
+                # Mostra o caminho do arquivo (CORRIGIDO)
+                arquivo_path = st.session_state.gerenciador.caminho_arquivo
+                arquivo_absoluto = os.path.abspath(arquivo_path)
+                st.write(f"📁 Caminho do arquivo: {arquivo_absoluto}")
+                st.write(f"📄 Arquivo existe? {os.path.exists(arquivo_absoluto)}")
                 
-                # Mostra o conteúdo do arquivo JSON
-                import json
+                # Salva
+                st.session_state.gerenciador.salvar_dados()
+                
+                # Verifica se foi salvo
+                st.write(f"📄 Arquivo existe agora? {os.path.exists(arquivo_absoluto)}")
+                
+                # Tenta ler o arquivo CORRETO
                 try:
-                    with open("dados_financeiros.json", "r", encoding="utf-8") as f:
+                    with open(arquivo_absoluto, "r", encoding="utf-8") as f:
                         dados_json = json.load(f)
                         st.write(f"📄 Conteúdo do JSON (cartões):")
-                        st.json(dados_json.get("cartoes_credito", []))
+                        
+                        # Mostra apenas o cartão atual
+                        for cartao_json in dados_json.get("cartoes_credito", []):
+                            if cartao_json.get("id_cartao") == cartao_config.id_cartao:
+                                st.json(cartao_json)
+                                break
                 except Exception as e:
                     st.error(f"Erro ao ler JSON: {e}")
                 
                 st.success(f"✅ Fechamento customizado adicionado: {mes_custom:02d}/{ano_custom} fecha dia {dia_custom}")
+                st.rerun()
 
         st.divider()
         
