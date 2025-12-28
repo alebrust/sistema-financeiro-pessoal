@@ -977,7 +977,7 @@ with tab_cartoes:
             
             # Tabs para separar os modos
             tab_rapido, tab_individual = st.tabs(["🚀 Lançamento Rápido", "📝 Lançamento Individual"])
-            
+
             with tab_rapido:
                 st.info("💡 **Modo Rápido:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
                 
@@ -989,9 +989,63 @@ with tab_cartoes:
                 if "contador_compras" not in st.session_state:
                     st.session_state.contador_compras = 0
                 
-                # Formulário para adicionar compras (sem submit = sem reload)
+                # Inicializa descrição selecionada
+                if "descricao_selecionada_rapida" not in st.session_state:
+                    st.session_state.descricao_selecionada_rapida = ""
+                
+                # === SELEÇÃO DE FORNECEDOR (FORA DO FORMULÁRIO) ===
+                st.write("**Selecione ou digite o fornecedor:**")
+                
+                fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                
+                col_input_desc = st.columns(1)[0]
+                descricao_pre_form = st.text_input(
+                    "Descrição/Fornecedor",
+                    value=st.session_state.descricao_selecionada_rapida,
+                    placeholder="Digite o nome do fornecedor...",
+                    help="💡 Digite livremente ou clique em um fornecedor abaixo",
+                    key="desc_rapida_input"
+                )
+                
+                # Atualiza o session_state com o valor digitado
+                st.session_state.descricao_selecionada_rapida = descricao_pre_form
+                
+                # Mostra botões de fornecedores apenas se houver e o campo estiver vazio
+                if fornecedores and not descricao_pre_form:
+                    st.caption("📋 **Fornecedores recentes** (clique para usar):")
+                    
+                    # Mostra os 10 primeiros em 5 colunas
+                    cols_fornecedores = st.columns(5)
+                    for idx, fornecedor in enumerate(fornecedores[:10]):
+                        col_idx = idx % 5
+                        if cols_fornecedores[col_idx].button(
+                            fornecedor,
+                            key=f"forn_rapido_{idx}",
+                            use_container_width=True,
+                            help=f"Usar '{fornecedor}'"
+                        ):
+                            st.session_state.descricao_selecionada_rapida = fornecedor
+                            st.rerun()
+                    
+                    # Se houver mais de 10, mostra expander
+                    if len(fornecedores) > 10:
+                        with st.expander(f"📂 Ver todos os fornecedores ({len(fornecedores)} total)"):
+                            cols_extra = st.columns(5)
+                            for idx, fornecedor in enumerate(fornecedores[10:], start=10):
+                                col_idx = idx % 5
+                                if cols_extra[col_idx].button(
+                                    fornecedor,
+                                    key=f"forn_rapido_extra_{idx}",
+                                    use_container_width=True
+                                ):
+                                    st.session_state.descricao_selecionada_rapida = fornecedor
+                                    st.rerun()
+                
+                st.divider()
+                
+                # === FORMULÁRIO DE COMPRA ===
                 with st.form("form_rapido_compras", clear_on_submit=True):
-                    st.write("**Nova Compra:**")
+                    st.write("**Dados da Compra:**")
                     
                     cartao_selecionado_id = st.selectbox(
                         "Cartão",
@@ -1000,19 +1054,15 @@ with tab_cartoes:
                     )
                     
                     col1, col2 = st.columns(2)
-                    with col1:               
-                        fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
-                        if fornecedores:
-                            descricao_compra = st.selectbox(
-                                "Descrição",
-                                options=[""] + fornecedores,
-                                format_func=lambda x: "Digite ou selecione..." if x == "" else x,
-                                key="desc_rapida_select"
-                            )
-                            if descricao_compra == "":
-                                descricao_compra = st.text_input("Ou digite nova descrição:", key="desc_rapida_text")
-                        else:
-                            descricao_compra = st.text_input("Descrição")
+                    with col1:
+                        # Usa o valor do session_state
+                        descricao_compra = st.text_input(
+                            "Descrição (confirmação)",
+                            value=st.session_state.descricao_selecionada_rapida,
+                            placeholder="Confirme ou edite a descrição",
+                            key="desc_rapida_form"
+                        )
+                    
                     with col2:
                         categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     
@@ -1034,19 +1084,18 @@ with tab_cartoes:
                             format_func=lambda x: "Nenhuma" if x == "" else x,
                             key="tag_rapida"
                         )
-
                     
                     with col7:
                         observacao_compra = st.text_input("Observação", placeholder="Opcional")
-
+            
                     submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
-
+            
                     if submitted:
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("⚠️ Preencha descrição, categoria e valor.")
-                        else:                          
+                        else:
                             ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
-                                cartao_selecionado_id, 
+                                cartao_selecionado_id,
                                 data_compra_cartao
                             )
                             
@@ -1066,75 +1115,8 @@ with tab_cartoes:
                                     "tag": tag_compra,
                                 })
                                 st.session_state.contador_compras += 1
-
-                
-                # Mostra compras pendentes
-                if st.session_state.compras_pendentes:
-                    st.divider()
-                    st.success(f"✅ **{len(st.session_state.compras_pendentes)} compra(s) na lista**")
-                    
-                    # Lista as compras com opção de remover
-                    for idx, compra in enumerate(st.session_state.compras_pendentes):
-                        col_info, col_remove = st.columns([6, 1])
-                                                
-                        with col_info:
-                            parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
-                            tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
-                            
-                            # Calcula o ciclo
-                            ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
-                                compra['id_cartao'], 
-                                compra['data_compra']
-                            )
-                            ciclo_txt = f"{mes_ciclo:02d}/{ano_ciclo}"
-                            
-                            st.text(
-                                f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
-                                f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
-                                f"{compra['data_compra'].strftime('%d/%m/%Y')} | "
-                                f"📅 Ciclo: {ciclo_txt}{tag_txt}"
-                            )
-                        
-                        with col_remove:
-                            if st.button("🗑️", key=f"remove_pending_{idx}_{st.session_state.contador_compras}", help="Remover"):
-                                st.session_state.compras_pendentes.pop(idx)
-                                st.rerun()
-                    
-                    st.divider()
-                    
-                    # Botões de ação
-                    col_salvar, col_limpar = st.columns(2)
-                    
-                    with col_salvar:
-                        if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
-                            sucesso_total = 0
-                            falhas = []
-                            
-                            for compra in st.session_state.compras_pendentes:
-                                sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                                    id_cartao=compra["id_cartao"],
-                                    descricao=compra["descricao"],
-                                    valor_total=compra["valor_total"],
-                                    data_compra=compra["data_compra"],
-                                    categoria=compra["categoria"],
-                                    num_parcelas=compra["num_parcelas"],
-                                    observacao=compra["observacao"],
-                                    tag=compra["tag"],
-                                )
-                                if sucesso:
-                                    sucesso_total += 1
-                                else:
-                                    falhas.append(compra["descricao"])
-                            
-                            st.session_state.gerenciador.salvar_dados()
-                            
-                            if falhas:
-                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
-                            else:
-                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
-                            
-                            st.session_state.compras_pendentes = []
-                            st.rerun()
+                                # Limpa a descrição após adicionar
+                                st.session_state.descricao_selecionada_rapida = ""
                     
                     with col_limpar:
                         if st.button("🗑️ Limpar Lista", use_container_width=True):
