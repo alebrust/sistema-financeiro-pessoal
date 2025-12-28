@@ -432,7 +432,6 @@ class GerenciadorContas:
                     categoria=t.get("categoria", "Outros"),
                     observacao=t.get("observacao", ""),
                     tag=t.get("tag", ""),
-                    fornecedores=t.get("fornecedores", ""),
                     id_transacao=t.get("id_transacao"),
                 )
             )
@@ -490,6 +489,7 @@ class GerenciadorContas:
             self.categorias = cats
 
         self.tags = data.get("tags", [])
+        self.fornecedores = data.get("fornecedores", [])    
 
     # ------------------------
     # Utilidades de Ciclos (Cartões)
