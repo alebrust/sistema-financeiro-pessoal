@@ -1699,6 +1699,70 @@ with tab_config:
     st.divider()
     st.subheader("Gerenciar Fornecedores")
     st.caption("Cadastre os fornecedores que você utiliza com frequência para facilitar o lançamento de compras.")
+
+
+    # === IMPORTAÇÃO VIA EXCEL ===
+    with st.expander("📤 Importar Fornecedores via Excel"):
+        st.write("**Como usar:**")
+        st.write("1. Prepare um arquivo Excel (.xlsx ou .csv) com os fornecedores")
+        st.write("2. Os fornecedores devem estar na **primeira coluna**")
+        st.write("3. Pode ter cabeçalho ou não (será ignorado se for texto)")
+        
+        arquivo_upload = st.file_uploader(
+            "Selecione o arquivo Excel",
+            type=["xlsx", "xls", "csv"],
+            key="upload_fornecedores"
+        )
+        
+        if arquivo_upload is not None:
+            try:
+                import pandas as pd
+                
+                # Lê o arquivo
+                if arquivo_upload.name.endswith('.csv'):
+                    df = pd.read_csv(arquivo_upload, header=None)
+                else:
+                    df = pd.read_excel(arquivo_upload, header=None)
+                
+                # Pega a primeira coluna
+                fornecedores_lista = df.iloc[:, 0].dropna().astype(str).tolist()
+                
+                # Remove possíveis cabeçalhos (linhas que parecem títulos)
+                fornecedores_lista = [f for f in fornecedores_lista if f.strip() and not f.lower() in ['fornecedor', 'fornecedores', 'nome', 'descrição', 'descricao']]
+                
+                st.write(f"**📋 {len(fornecedores_lista)} fornecedores encontrados no arquivo:**")
+                
+                # Mostra preview
+                preview = fornecedores_lista[:10]
+                for f in preview:
+                    st.text(f"• {f}")
+                
+                if len(fornecedores_lista) > 10:
+                    st.caption(f"... e mais {len(fornecedores_lista) - 10} fornecedores")
+                
+                col_import, col_cancel = st.columns(2)
+                
+                with col_import:
+                    if st.button("✅ Importar Todos", type="primary", use_container_width=True):
+                        novos, duplicados = st.session_state.gerenciador.importar_fornecedores_de_lista(fornecedores_lista)
+                        st.session_state.gerenciador.salvar_dados()
+                        
+                        if novos > 0:
+                            st.success(f"✅ {novos} fornecedores importados com sucesso!")
+                        if duplicados > 0:
+                            st.info(f"ℹ️ {duplicados} fornecedores já existiam e foram ignorados.")
+                        
+                        st.rerun()
+                
+                with col_cancel:
+                    if st.button("❌ Cancelar", use_container_width=True):
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"❌ Erro ao ler o arquivo: {str(e)}")
+                st.info("Certifique-se de que o arquivo está no formato correto (Excel ou CSV).")
+    
+    st.divider()
     
     col_forn1, col_forn2 = st.columns([3, 2])
     
