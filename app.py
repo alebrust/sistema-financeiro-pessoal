@@ -989,62 +989,9 @@ with tab_cartoes:
                 if "contador_compras" not in st.session_state:
                     st.session_state.contador_compras = 0
                 
-                # Inicializa descrição selecionada
-                if "descricao_selecionada_rapida" not in st.session_state:
-                    st.session_state.descricao_selecionada_rapida = ""
-                
-                # === SELEÇÃO DE FORNECEDOR (FORA DO FORMULÁRIO) ===
-                st.write("**Selecione ou digite o fornecedor:**")
-                
-                fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
-                
-                descricao_pre_form = st.text_input(
-                    "Descrição/Fornecedor",
-                    value=st.session_state.descricao_selecionada_rapida,
-                    placeholder="Digite o nome do fornecedor...",
-                    help="💡 Digite livremente ou clique em um fornecedor abaixo",
-                    key="desc_rapida_input"
-                )
-                
-                # Atualiza o session_state com o valor digitado
-                st.session_state.descricao_selecionada_rapida = descricao_pre_form
-                
-                # Mostra botões de fornecedores apenas se houver e o campo estiver vazio
-                if fornecedores and not descricao_pre_form:
-                    st.caption("📋 **Fornecedores recentes** (clique para usar):")
-                    
-                    # Mostra os 10 primeiros em 5 colunas
-                    cols_fornecedores = st.columns(5)
-                    for idx, fornecedor in enumerate(fornecedores[:10]):
-                        col_idx = idx % 5
-                        if cols_fornecedores[col_idx].button(
-                            fornecedor,
-                            key=f"forn_rapido_{idx}",
-                            use_container_width=True,
-                            help=f"Usar '{fornecedor}'"
-                        ):
-                            st.session_state.descricao_selecionada_rapida = fornecedor
-                            st.rerun()
-                    
-                    # Se houver mais de 10, mostra expander
-                    if len(fornecedores) > 10:
-                        with st.expander(f"📂 Ver todos os fornecedores ({len(fornecedores)} total)"):
-                            cols_extra = st.columns(5)
-                            for idx, fornecedor in enumerate(fornecedores[10:], start=10):
-                                col_idx = idx % 5
-                                if cols_extra[col_idx].button(
-                                    fornecedor,
-                                    key=f"forn_rapido_extra_{idx}",
-                                    use_container_width=True
-                                ):
-                                    st.session_state.descricao_selecionada_rapida = fornecedor
-                                    st.rerun()
-                
-                st.divider()
-                
-                # === FORMULÁRIO DE COMPRA ===
+                # Formulário para adicionar compras (sem submit = sem reload)
                 with st.form("form_rapido_compras", clear_on_submit=True):
-                    st.write("**Dados da Compra:**")
+                    st.write("**Nova Compra:**")
                     
                     cartao_selecionado_id = st.selectbox(
                         "Cartão",
@@ -1054,13 +1001,20 @@ with tab_cartoes:
                     
                     col1, col2 = st.columns(2)
                     with col1:
-                        # Usa o valor do session_state
+                        # Campo de texto simples com datalist (autocomplete nativo do HTML)
+                        fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                        
+                        # Cria um selectbox que permite digitação livre
                         descricao_compra = st.text_input(
-                            "Descrição",
-                            value=st.session_state.descricao_selecionada_rapida,
-                            placeholder="Confirme ou edite a descrição",
-                            key="desc_rapida_form"
+                            "Descrição/Fornecedor",
+                            placeholder="Digite o nome do fornecedor...",
+                            help="💡 Digite livremente. Fornecedores anteriores aparecerão como sugestão.",
+                            key="desc_rapida"
                         )
+                        
+                        # Mostra fornecedores recentes como referência (apenas visual)
+                        if fornecedores:
+                            st.caption(f"📋 Últimos usados: {', '.join(fornecedores[:5])}")
                     
                     with col2:
                         categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
@@ -1114,8 +1068,6 @@ with tab_cartoes:
                                     "tag": tag_compra,
                                 })
                                 st.session_state.contador_compras += 1
-                                # Limpa a descrição após adicionar
-                                st.session_state.descricao_selecionada_rapida = ""
                 
                 # Mostra compras pendentes
                 if st.session_state.compras_pendentes:
@@ -1191,7 +1143,7 @@ with tab_cartoes:
                             st.rerun()
                 else:
                     st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
-        
+
             with tab_individual:
                 st.info("📝 **Modo Individual:** Cada compra é salva imediatamente após o envio.")
                 
@@ -1202,18 +1154,19 @@ with tab_cartoes:
                         format_func=lambda cid: mapa_cartao[cid].nome,
                         key="purchase_cartao_id"
                     )
+                    
+                    # Campo de texto simples
                     fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
+                    descricao_compra = st.text_input(
+                        "Descrição da Compra",
+                        placeholder="Digite o nome do fornecedor...",
+                        help="💡 Digite livremente. Fornecedores anteriores aparecerão como sugestão.",
+                        key="desc_individual"
+                    )
+                    
+                    # Mostra fornecedores recentes como referência
                     if fornecedores:
-                        descricao_compra = st.selectbox(
-                            "Descrição da Compra",
-                            options=[""] + fornecedores,
-                            format_func=lambda x: "Digite ou selecione..." if x == "" else x,
-                            key="desc_individual_select"
-                        )
-                        if descricao_compra == "":
-                            descricao_compra = st.text_input("Ou digite nova descrição:", key="desc_individual_text")
-                    else:
-                        descricao_compra = st.text_input("Descrição da Compra")
+                        st.caption(f"📋 Últimos usados: {', '.join(fornecedores[:5])}")
                    
                     categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
                     valor_compra = st.number_input("Valor Total da Compra (R$)", min_value=0.01, format="%.2f")
@@ -1227,7 +1180,7 @@ with tab_cartoes:
                         format_func=lambda x: "Nenhuma" if x == "" else x,
                         key="tag_individual"
                     )
-
+            
                     if st.form_submit_button("Lançar Compra", use_container_width=True):
                         if not all([descricao_compra, categoria_compra, valor_compra > 0]):
                             st.error("Preencha todos os detalhes da compra.")
@@ -1258,6 +1211,7 @@ with tab_cartoes:
                                     st.rerun()
                                 else:
                                     st.error("Falha ao registrar a compra.")
+
     with col_cartoes1:
         st.subheader("Faturas dos Cartões")
         cartoes = st.session_state.gerenciador.cartoes_credito
