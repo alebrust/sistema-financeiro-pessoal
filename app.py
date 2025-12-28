@@ -998,7 +998,6 @@ with tab_cartoes:
                 
                 fornecedores = st.session_state.gerenciador.obter_fornecedores_unicos()
                 
-                col_input_desc = st.columns(1)[0]
                 descricao_pre_form = st.text_input(
                     "Descrição/Fornecedor",
                     value=st.session_state.descricao_selecionada_rapida,
@@ -1057,7 +1056,7 @@ with tab_cartoes:
                     with col1:
                         # Usa o valor do session_state
                         descricao_compra = st.text_input(
-                            "Descrição (confirmação)",
+                            "Descrição",
                             value=st.session_state.descricao_selecionada_rapida,
                             placeholder="Confirme ou edite a descrição",
                             key="desc_rapida_form"
@@ -1117,6 +1116,74 @@ with tab_cartoes:
                                 st.session_state.contador_compras += 1
                                 # Limpa a descrição após adicionar
                                 st.session_state.descricao_selecionada_rapida = ""
+                
+                # Mostra compras pendentes
+                if st.session_state.compras_pendentes:
+                    st.divider()
+                    st.success(f"✅ **{len(st.session_state.compras_pendentes)} compra(s) na lista**")
+                    
+                    # Lista as compras com opção de remover
+                    for idx, compra in enumerate(st.session_state.compras_pendentes):
+                        col_info, col_remove = st.columns([6, 1])
+                                                    
+                        with col_info:
+                            parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
+                            tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
+                            
+                            # Calcula o ciclo
+                            ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                                compra['id_cartao'], 
+                                compra['data_compra']
+                            )
+                            ciclo_txt = f"{mes_ciclo:02d}/{ano_ciclo}"
+                            
+                            st.text(
+                                f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
+                                f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
+                                f"{compra['data_compra'].strftime('%d/%m/%Y')} | "
+                                f"📅 Ciclo: {ciclo_txt}{tag_txt}"
+                            )
+                        
+                        with col_remove:
+                            if st.button("🗑️", key=f"remove_pending_{idx}_{st.session_state.contador_compras}", help="Remover"):
+                                st.session_state.compras_pendentes.pop(idx)
+                                st.rerun()
+                    
+                    st.divider()
+                    
+                    # Botões de ação
+                    col_salvar, col_limpar = st.columns(2)
+                    
+                    with col_salvar:
+                        if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
+                            sucesso_total = 0
+                            falhas = []
+                            
+                            for compra in st.session_state.compras_pendentes:
+                                sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                                    id_cartao=compra["id_cartao"],
+                                    descricao=compra["descricao"],
+                                    valor_total=compra["valor_total"],
+                                    data_compra=compra["data_compra"],
+                                    categoria=compra["categoria"],
+                                    num_parcelas=compra["num_parcelas"],
+                                    observacao=compra["observacao"],
+                                    tag=compra["tag"],
+                                )
+                                if sucesso:
+                                    sucesso_total += 1
+                                else:
+                                    falhas.append(compra["descricao"])
+                            
+                            st.session_state.gerenciador.salvar_dados()
+                            
+                            if falhas:
+                                st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                            else:
+                                st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
+                            
+                            st.session_state.compras_pendentes = []
+                            st.rerun()
                     
                     with col_limpar:
                         if st.button("🗑️ Limpar Lista", use_container_width=True):
@@ -1124,7 +1191,7 @@ with tab_cartoes:
                             st.rerun()
                 else:
                     st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
-            
+        
             with tab_individual:
                 st.info("📝 **Modo Individual:** Cada compra é salva imediatamente após o envio.")
                 
