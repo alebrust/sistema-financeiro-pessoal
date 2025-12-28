@@ -319,7 +319,7 @@ class Fatura:
 
 
 class GerenciadorContas:
-    def __init__(self, caminho_arquivo: str = "dados.json"):
+    def __init__(self, caminho_arquivo: str = "dados_v15.json"):
         self.caminho_arquivo = caminho_arquivo
         self.contas: List[Conta] = []
         self.transacoes: List[Transacao] = []
@@ -338,6 +338,7 @@ class GerenciadorContas:
             "Outros",
         ]
         self.tags: List[str] = []  
+        self.fornecedores: List[str] = []
         # Cache de cotações
         self._cotacoes_cache: Dict[str, Dict[str, float]] = {}
         self._cotacoes_ttl: int = 60  # segundos
@@ -358,6 +359,7 @@ class GerenciadorContas:
             "faturas": [f.para_dict() for f in self.faturas],
             "categorias": self.categorias,
             "tags": self.tags, 
+            "fornecedores": self.fornecedores,
         }
         try:
             # Cria o diretório se não existir
@@ -375,13 +377,6 @@ class GerenciadorContas:
             import traceback
             traceback.print_exc()
 
-
-
-
-
-
-    
-    
 
     def carregar_dados(self) -> None:
         if not os.path.exists(self.caminho_arquivo):
@@ -437,6 +432,7 @@ class GerenciadorContas:
                     categoria=t.get("categoria", "Outros"),
                     observacao=t.get("observacao", ""),
                     tag=t.get("tag", ""),
+                    fornecedores=t.get("fornecedores", ""),
                     id_transacao=t.get("id_transacao"),
                 )
             )
@@ -1519,25 +1515,6 @@ class GerenciadorContas:
     # ------------------------
     # Fornecedores únicos
     # ------------------------
-
-    def obter_fornecedores_unicos(self) -> List[str]:
-        """Retorna lista única de descrições de compras anteriores, removendo informações de parcelas"""
-        import re
-        
-        descricoes_brutas = [c.descricao for c in self.compras_cartao]
-        
-        # Remove padrões de parcelas: (1/2), (2/3), [1/2], 1/2, etc.
-        descricoes_limpas = []
-        for desc in descricoes_brutas:
-            # Remove padrões como: (1/2), [1/2], 1/2, (parcela 1 de 2), etc.
-            desc_limpa = re.sub(r'\s*[\(\[]?\d+\s*/\s*\d+[\)\]]?\s*$', '', desc)
-            desc_limpa = re.sub(r'\s*[\(\[](parcela\s*)?\d+\s*(de|/)?\s*\d+[\)\]]\s*', '', desc_limpa, flags=re.IGNORECASE)
-            desc_limpa = desc_limpa.strip()
-            if desc_limpa:
-                descricoes_limpas.append(desc_limpa)
-        
-        # Remove duplicatas e ordena alfabeticamente
-        return sorted(list(set(descricoes_limpas)))
     
     def adicionar_tag(self, nome_tag: str) -> bool:
         """Adiciona uma nova TAG ao cadastro"""
@@ -1564,6 +1541,25 @@ class GerenciadorContas:
                 return True
         return False
 
+    def adicionar_fornecedor(self, nome: str) -> bool:
+        """Adiciona um novo fornecedor"""
+        nome = nome.strip()
+        if nome and nome not in self.fornecedores:
+            self.fornecedores.append(nome)
+            self.fornecedores.sort()
+            return True
+        return False
+    
+    def remover_fornecedor(self, nome: str) -> bool:
+        """Remove um fornecedor"""
+        if nome in self.fornecedores:
+            self.fornecedores.remove(nome)
+            return True
+        return False
+    
+    def obter_fornecedores(self) -> List[str]:
+        """Retorna lista de fornecedores cadastrados"""
+        return sorted(self.fornecedores)
 
     def calcular_ciclo_compra(self, id_cartao: str, data_compra: date) -> tuple:
         """
