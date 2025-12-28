@@ -989,27 +989,6 @@ with tab_cartoes:
                 if "contador_compras" not in st.session_state:
                     st.session_state.contador_compras = 0
                 
-                # Formulário para adicionar compras (sem submit = sem reload)
-                with st.form("form_rapido_compras", clear_on_submit=True):
-                    st.write("**Nova Compra:**")
-                    
-                    cartao_selecionado_id = st.selectbox(
-                        "Cartão",
-                        options=ids_cartao,
-                        format_func=lambda cid: mapa_cartao[cid].nome,
-                    )
-
-            with tab_rapido:
-                st.info("💡 **Modo Rápido:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
-                
-                # Inicializa lista de compras pendentes
-                if "compras_pendentes" not in st.session_state:
-                    st.session_state.compras_pendentes = []
-                
-                # Contador para gerar keys únicas
-                if "contador_compras" not in st.session_state:
-                    st.session_state.contador_compras = 0
-                
                 # === SELEÇÃO DE FORNECEDOR (FORA DO FORMULÁRIO) ===
                 st.write("**Selecione o fornecedor:**")
                 
