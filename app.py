@@ -979,207 +979,207 @@ with tab_cartoes:
             # Removida a aba de Lançamento Individual - usando apenas Lançamento Rápido# Removida a aba de Lançamento Individual - usando apenas Lançamento Rápido
 
            
-            st.info("💡 **Lançamento de Compras no Cartão:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
-            
-            # Inicializa lista de compras pendentes
-            if "compras_pendentes" not in st.session_state:
-                st.session_state.compras_pendentes = []
-            
-            # Contador para gerar keys únicas
-            if "contador_compras" not in st.session_state:
-                st.session_state.contador_compras = 0
-            
-            # === BOTÃO ADICIONAR FORNECEDOR (FORA DO FORMULÁRIO) ===
-            col_btn_add = st.columns([6, 1])
-            with col_btn_add[1]:
-                if st.button("➕ Novo Fornecedor", key="add_forn_rapido", help="Adicionar novo fornecedor", use_container_width=True):
-                    st.session_state.mostrar_add_fornecedor_rapido = True
-                    st.rerun()
-            
-            # Modal para adicionar fornecedor
-            if st.session_state.get("mostrar_add_fornecedor_rapido", False):
-                with st.container():
-                    st.write("**Adicionar Novo Fornecedor:**")
-                    novo_fornecedor = st.text_input(
-                        "Nome do fornecedor:",
-                        key="input_novo_forn_rapido",
-                        placeholder="Ex: Supermercado XYZ"
-                    )
-                    
-                    col_salvar, col_cancelar = st.columns(2)
-                    
-                    with col_salvar:
-                        if st.button("✅ Salvar", key="salvar_novo_forn_rapido", type="primary"):
-                            if novo_fornecedor.strip():
-                                if st.session_state.gerenciador.adicionar_fornecedor(novo_fornecedor):
-                                    st.session_state.gerenciador.salvar_dados()
-                                    st.toast(f"Fornecedor '{novo_fornecedor}' adicionado!")
-                                    st.session_state.mostrar_add_fornecedor_rapido = False
-                                    st.rerun()
-                                else:
-                                    st.warning("Fornecedor já existe!")
-                            else:
-                                st.warning("Digite um nome válido!")
-                    
-                    with col_cancelar:
-                        if st.button("❌ Cancelar", key="cancelar_novo_forn_rapido"):
-                            st.session_state.mostrar_add_fornecedor_rapido = False
-                            st.rerun()
-                
-                st.divider()
-            
-            # === FORMULÁRIO DE COMPRA ===
-            with st.form("form_rapido_compras", clear_on_submit=True):
-                st.write("**Dados da Compra:**")
-                
-                cartao_selecionado_id = st.selectbox(
-                    "Cartão",
-                    options=ids_cartao,
-                    format_func=lambda cid: mapa_cartao[cid].nome,
+        st.info("💡 **Lançamento de Compras no Cartão:** Use os campos abaixo para adicionar múltiplas compras. Clique em 'Salvar Todas' apenas quando terminar.")
+        
+        # Inicializa lista de compras pendentes
+        if "compras_pendentes" not in st.session_state:
+            st.session_state.compras_pendentes = []
+        
+        # Contador para gerar keys únicas
+        if "contador_compras" not in st.session_state:
+            st.session_state.contador_compras = 0
+        
+        # === BOTÃO ADICIONAR FORNECEDOR (FORA DO FORMULÁRIO) ===
+        col_btn_add = st.columns([6, 1])
+        with col_btn_add[1]:
+            if st.button("➕ Novo Fornecedor", key="add_forn_rapido", help="Adicionar novo fornecedor", use_container_width=True):
+                st.session_state.mostrar_add_fornecedor_rapido = True
+                st.rerun()
+        
+        # Modal para adicionar fornecedor
+        if st.session_state.get("mostrar_add_fornecedor_rapido", False):
+            with st.container():
+                st.write("**Adicionar Novo Fornecedor:**")
+                novo_fornecedor = st.text_input(
+                    "Nome do fornecedor:",
+                    key="input_novo_forn_rapido",
+                    placeholder="Ex: Supermercado XYZ"
                 )
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    # Seleção de fornecedor DENTRO do formulário
-                    fornecedores = st.session_state.gerenciador.obter_fornecedores()
-                    
-                    if fornecedores:
-                        descricao_compra = st.selectbox(
-                            "Descrição/Fornecedor",
-                            options=fornecedores,
-                            key="desc_rapida"
-                        )
-                    else:
-                        st.warning("⚠️ Nenhum fornecedor cadastrado. Use o botão '➕ Novo Fornecedor' acima.")
-                        descricao_compra = ""
-                
-                with col2:
-                    categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
-                
-                col3, col4, col5 = st.columns(3)
-                with col3:
-                    valor_compra = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-                with col4:
-                    num_parcelas = st.number_input("Parcelas", min_value=1, value=1)
-                with col5:
-                    data_compra_cartao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
-                
-                col6, col7 = st.columns(2)
-                
-                with col6:
-                    tags_disponiveis = [""] + st.session_state.gerenciador.tags
-                    tag_compra = st.selectbox(
-                        "TAG (Opcional)",
-                        options=tags_disponiveis,
-                        format_func=lambda x: "Nenhuma" if x == "" else x,
-                        key="tag_rapida"
-                    )
-                
-                with col7:
-                    observacao_compra = st.text_input("Observação", placeholder="Opcional")
-        
-                submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
-        
-                if submitted:
-                    if not all([descricao_compra, categoria_compra, valor_compra > 0]):
-                        st.error("⚠️ Preencha descrição, categoria e valor.")
-                    else:
-                        ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
-                            cartao_selecionado_id,
-                            data_compra_cartao
-                        )
-                        
-                        if st.session_state.gerenciador.ciclo_esta_fechado(cartao_selecionado_id, ano_ciclo, mes_ciclo):
-                            cartao_nome = mapa_cartao[cartao_selecionado_id].nome
-                            st.error(f"❌ **Não é possível adicionar esta compra!**\n\nO ciclo **{mes_ciclo:02d}/{ano_ciclo}** do cartão **{cartao_nome}** já está fechado.\n\nPara lançar compras neste período, você precisa reabrir a fatura correspondente.")
-                        else:
-                            st.session_state.compras_pendentes.append({
-                                "id_cartao": cartao_selecionado_id,
-                                "cartao_nome": mapa_cartao[cartao_selecionado_id].nome,
-                                "descricao": descricao_compra,
-                                "valor_total": valor_compra,
-                                "data_compra": data_compra_cartao,
-                                "categoria": categoria_compra,
-                                "num_parcelas": num_parcelas,
-                                "observacao": observacao_compra,
-                                "tag": tag_compra,
-                            })
-                            st.session_state.contador_compras += 1
-            
-            # Mostra compras pendentes
-            if st.session_state.compras_pendentes:
-                st.divider()
-                st.success(f"✅ **{len(st.session_state.compras_pendentes)} compra(s) na lista**")
-                
-                # Lista as compras com opção de remover
-                for idx, compra in enumerate(st.session_state.compras_pendentes):
-                    col_info, col_remove = st.columns([6, 1])
-                                                
-                    with col_info:
-                        parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
-                        tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
-                        
-                        # Calcula o ciclo
-                        ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
-                            compra['id_cartao'], 
-                            compra['data_compra']
-                        )
-                        ciclo_txt = f"{mes_ciclo:02d}/{ano_ciclo}"
-                        
-                        st.text(
-                            f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
-                            f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
-                            f"{compra['data_compra'].strftime('%d/%m/%Y')} | "
-                            f"📅 Ciclo: {ciclo_txt}{tag_txt}"
-                        )
-                    
-                    with col_remove:
-                        if st.button("🗑️", key=f"remove_pending_{idx}_{st.session_state.contador_compras}", help="Remover"):
-                            st.session_state.compras_pendentes.pop(idx)
-                            st.rerun()
-                
-                st.divider()
-                
-                # Botões de ação
-                col_salvar, col_limpar = st.columns(2)
+                col_salvar, col_cancelar = st.columns(2)
                 
                 with col_salvar:
-                    if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
-                        sucesso_total = 0
-                        falhas = []
-                        
-                        for compra in st.session_state.compras_pendentes:
-                            sucesso = st.session_state.gerenciador.registrar_compra_cartao(
-                                id_cartao=compra["id_cartao"],
-                                descricao=compra["descricao"],
-                                valor_total=compra["valor_total"],
-                                data_compra=compra["data_compra"],
-                                categoria=compra["categoria"],
-                                num_parcelas=compra["num_parcelas"],
-                                observacao=compra["observacao"],
-                                tag=compra["tag"],
-                            )
-                            if sucesso:
-                                sucesso_total += 1
+                    if st.button("✅ Salvar", key="salvar_novo_forn_rapido", type="primary"):
+                        if novo_fornecedor.strip():
+                            if st.session_state.gerenciador.adicionar_fornecedor(novo_fornecedor):
+                                st.session_state.gerenciador.salvar_dados()
+                                st.toast(f"Fornecedor '{novo_fornecedor}' adicionado!")
+                                st.session_state.mostrar_add_fornecedor_rapido = False
+                                st.rerun()
                             else:
-                                falhas.append(compra["descricao"])
-                        
-                        st.session_state.gerenciador.salvar_dados()
-                        
-                        if falhas:
-                            st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                                st.warning("Fornecedor já existe!")
                         else:
-                            st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
-                        
-                        st.session_state.compras_pendentes = []
-                        st.rerun()
+                            st.warning("Digite um nome válido!")
                 
-                with col_limpar:
-                    if st.button("🗑️ Limpar Lista", use_container_width=True):
-                        st.session_state.compras_pendentes = []
+                with col_cancelar:
+                    if st.button("❌ Cancelar", key="cancelar_novo_forn_rapido"):
+                        st.session_state.mostrar_add_fornecedor_rapido = False
                         st.rerun()
-            else:
-                st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
+            
+            st.divider()
+        
+        # === FORMULÁRIO DE COMPRA ===
+        with st.form("form_rapido_compras", clear_on_submit=True):
+            st.write("**Dados da Compra:**")
+            
+            cartao_selecionado_id = st.selectbox(
+                "Cartão",
+                options=ids_cartao,
+                format_func=lambda cid: mapa_cartao[cid].nome,
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                # Seleção de fornecedor DENTRO do formulário
+                fornecedores = st.session_state.gerenciador.obter_fornecedores()
+                
+                if fornecedores:
+                    descricao_compra = st.selectbox(
+                        "Descrição/Fornecedor",
+                        options=fornecedores,
+                        key="desc_rapida"
+                    )
+                else:
+                    st.warning("⚠️ Nenhum fornecedor cadastrado. Use o botão '➕ Novo Fornecedor' acima.")
+                    descricao_compra = ""
+            
+            with col2:
+                categoria_compra = st.selectbox("Categoria", st.session_state.gerenciador.categorias)
+            
+            col3, col4, col5 = st.columns(3)
+            with col3:
+                valor_compra = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
+            with col4:
+                num_parcelas = st.number_input("Parcelas", min_value=1, value=1)
+            with col5:
+                data_compra_cartao = st.date_input("Data", value=datetime.today(), format="DD/MM/YYYY")
+            
+            col6, col7 = st.columns(2)
+            
+            with col6:
+                tags_disponiveis = [""] + st.session_state.gerenciador.tags
+                tag_compra = st.selectbox(
+                    "TAG (Opcional)",
+                    options=tags_disponiveis,
+                    format_func=lambda x: "Nenhuma" if x == "" else x,
+                    key="tag_rapida"
+                )
+            
+            with col7:
+                observacao_compra = st.text_input("Observação", placeholder="Opcional")
+    
+            submitted = st.form_submit_button("➕ Adicionar à Lista", use_container_width=True, type="primary")
+    
+            if submitted:
+                if not all([descricao_compra, categoria_compra, valor_compra > 0]):
+                    st.error("⚠️ Preencha descrição, categoria e valor.")
+                else:
+                    ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                        cartao_selecionado_id,
+                        data_compra_cartao
+                    )
+                    
+                    if st.session_state.gerenciador.ciclo_esta_fechado(cartao_selecionado_id, ano_ciclo, mes_ciclo):
+                        cartao_nome = mapa_cartao[cartao_selecionado_id].nome
+                        st.error(f"❌ **Não é possível adicionar esta compra!**\n\nO ciclo **{mes_ciclo:02d}/{ano_ciclo}** do cartão **{cartao_nome}** já está fechado.\n\nPara lançar compras neste período, você precisa reabrir a fatura correspondente.")
+                    else:
+                        st.session_state.compras_pendentes.append({
+                            "id_cartao": cartao_selecionado_id,
+                            "cartao_nome": mapa_cartao[cartao_selecionado_id].nome,
+                            "descricao": descricao_compra,
+                            "valor_total": valor_compra,
+                            "data_compra": data_compra_cartao,
+                            "categoria": categoria_compra,
+                            "num_parcelas": num_parcelas,
+                            "observacao": observacao_compra,
+                            "tag": tag_compra,
+                        })
+                        st.session_state.contador_compras += 1
+        
+        # Mostra compras pendentes
+        if st.session_state.compras_pendentes:
+            st.divider()
+            st.success(f"✅ **{len(st.session_state.compras_pendentes)} compra(s) na lista**")
+            
+            # Lista as compras com opção de remover
+            for idx, compra in enumerate(st.session_state.compras_pendentes):
+                col_info, col_remove = st.columns([6, 1])
+                                            
+                with col_info:
+                    parcelas_txt = f" ({compra['num_parcelas']}x)" if compra['num_parcelas'] > 1 else ""
+                    tag_txt = f" 🏷️ {compra['tag']}" if compra['tag'] else ""
+                    
+                    # Calcula o ciclo
+                    ano_ciclo, mes_ciclo = st.session_state.gerenciador.calcular_ciclo_compra(
+                        compra['id_cartao'], 
+                        compra['data_compra']
+                    )
+                    ciclo_txt = f"{mes_ciclo:02d}/{ano_ciclo}"
+                    
+                    st.text(
+                        f"{idx+1}. {compra['cartao_nome']} | {compra['descricao']} | "
+                        f"R$ {compra['valor_total']:.2f}{parcelas_txt} | "
+                        f"{compra['data_compra'].strftime('%d/%m/%Y')} | "
+                        f"📅 Ciclo: {ciclo_txt}{tag_txt}"
+                    )
+                
+                with col_remove:
+                    if st.button("🗑️", key=f"remove_pending_{idx}_{st.session_state.contador_compras}", help="Remover"):
+                        st.session_state.compras_pendentes.pop(idx)
+                        st.rerun()
+            
+            st.divider()
+            
+            # Botões de ação
+            col_salvar, col_limpar = st.columns(2)
+            
+            with col_salvar:
+                if st.button("💾 Salvar Todas as Compras", type="primary", use_container_width=True):
+                    sucesso_total = 0
+                    falhas = []
+                    
+                    for compra in st.session_state.compras_pendentes:
+                        sucesso = st.session_state.gerenciador.registrar_compra_cartao(
+                            id_cartao=compra["id_cartao"],
+                            descricao=compra["descricao"],
+                            valor_total=compra["valor_total"],
+                            data_compra=compra["data_compra"],
+                            categoria=compra["categoria"],
+                            num_parcelas=compra["num_parcelas"],
+                            observacao=compra["observacao"],
+                            tag=compra["tag"],
+                        )
+                        if sucesso:
+                            sucesso_total += 1
+                        else:
+                            falhas.append(compra["descricao"])
+                    
+                    st.session_state.gerenciador.salvar_dados()
+                    
+                    if falhas:
+                        st.warning(f"⚠️ {sucesso_total} salvas, {len(falhas)} falharam: {', '.join(falhas)}")
+                    else:
+                        st.success(f"🎉 {sucesso_total} compras registradas com sucesso!")
+                    
+                    st.session_state.compras_pendentes = []
+                    st.rerun()
+            
+            with col_limpar:
+                if st.button("🗑️ Limpar Lista", use_container_width=True):
+                    st.session_state.compras_pendentes = []
+                    st.rerun()
+        else:
+            st.info("📝 Nenhuma compra na lista ainda. Use o formulário acima para adicionar.")
 
 
     with col_cartoes1:
