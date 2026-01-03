@@ -455,7 +455,7 @@ with tab_transacoes:
     key="filtro_mostrar_compras_cartao"
 )
 
-st.divider()
+    st.divider()
     
     # === CALCULAR PERÍODO ===
     hoje = date.today()
