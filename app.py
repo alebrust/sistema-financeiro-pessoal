@@ -320,6 +320,21 @@ with tab_dashboard:
 # --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
+    # === DIAGNÓSTICO TEMPORÁRIO ===
+    st.error("🔍 INÍCIO DO DIAGNÓSTICO")
+    st.write(f"**Total de transações no sistema:** {len(st.session_state.gerenciador.transacoes)}")
+    
+    if st.session_state.gerenciador.transacoes:
+        st.success("✅ Há transações no sistema!")
+        st.write("**Primeiras 3 transações:**")
+        for i, t in enumerate(st.session_state.gerenciador.transacoes[:3]):
+            st.write(f"{i+1}. Data: {t.data} | Descrição: {t.descricao} | Valor: R$ {t.valor:.2f}")
+    else:
+        st.error("❌ NÃO HÁ TRANSAÇÕES NO SISTEMA!")
+    
+    st.error("🔍 FIM DO DIAGNÓSTICO")
+    st.divider()
+    # === FIM DO DIAGNÓSTICO ===
     
     # === FILTROS ===
     from datetime import timedelta
