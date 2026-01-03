@@ -320,6 +320,33 @@ with tab_dashboard:
 # --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
+
+    
+    # === DIAGNÓSTICO FORÇADO ===
+    st.error("=" * 50)
+    st.error("DIAGNÓSTICO INICIADO")
+    st.error("=" * 50)
+    
+    try:
+        total = len(st.session_state.gerenciador.transacoes)
+        st.success(f"Total de transações: {total}")
+        
+        # Verifica se transacoes_filtradas existe
+        if 'transacoes_filtradas' in locals():
+            st.info(f"Transações filtradas: {len(transacoes_filtradas)}")
+        else:
+            st.warning("Variável 'transacoes_filtradas' ainda não existe aqui")
+        
+    except Exception as e:
+        st.error(f"ERRO: {e}")
+    
+    st.error("=" * 50)
+    st.divider()
+    # === FIM DO DIAGNÓSTICO ===
+
+
+
+    
     # === DIAGNÓSTICO TEMPORÁRIO ===
     st.error("🔍 INÍCIO DO DIAGNÓSTICO")
     st.write(f"**Total de transações no sistema:** {len(st.session_state.gerenciador.transacoes)}")
