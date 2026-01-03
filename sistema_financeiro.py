@@ -431,7 +431,7 @@ class GerenciadorContas:
             self.transacoes.append(
                 Transacao(
                     id_conta=t.get("id_conta", ""),
-                    descricao=t.get("descricao", ""),
+                    descricao=t.get("descricao", ""),    
                     valor=float(t.get("valor", 0.0)),
                     tipo=t.get("tipo", "Despesa"),
                     data_transacao=parse_date_safe(t.get("data"), date.today()),
@@ -439,6 +439,8 @@ class GerenciadorContas:
                     observacao=t.get("observacao", ""),
                     tag=t.get("tag", ""),
                     id_transacao=t.get("id_transacao"),
+                    id_compra_cartao=t.get("id_compra_cartao"),  # ← ADICIONE ESTA LINHA
+                    informativa=t.get("informativa", False),  # ← ADICIONE ESTA LINHA
                 )
             )
 
@@ -1276,6 +1278,7 @@ class GerenciadorContas:
             c for c in self.compras_cartao
             if c.id_cartao == id_cartao and c.id_fatura is None
         ]
+
     def registrar_compra_cartao(
         self,
         id_cartao: str,
@@ -1329,56 +1332,21 @@ class GerenciadorContas:
                 data_compra_real=data_compra,     # data real da compra
             )
             self.compras_cartao.append(nova)
+            
+            # ← ADICIONE ESTAS LINHAS AQUI (PASSO 4)
+            # Registra a compra no histórico como transação informativa
+            self.registrar_compra_no_historico(
+                id_compra_cartao=nova.id_compra,
+                descricao=desc_parcela,
+                valor=valor_parcela,
+                data_compra=data_compra_parcela,  # Usa a data da parcela
+                categoria=categoria,
+                tag=tag,
+                observacao=observacao,
+            )
     
         return True
 
-    def remover_compra_cartao(self, id_compra_original: str) -> None:
-        self.compras_cartao = [
-            c for c in self.compras_cartao if c.id_compra_original != id_compra_original
-        ]
-
-
-
-
-
-
-
-    
-    def fechar_fatura(
-        self,
-        id_cartao: str,
-        data_fechamento_real: date,
-        data_vencimento_real: date,
-    ) -> Optional[Fatura]:
-        cartao = self.buscar_cartao_por_id(id_cartao)
-        if not cartao:
-            return None
-
-        ano = data_vencimento_real.year
-        mes = data_vencimento_real.month
-
-        elegiveis = [
-            c for c in self.compras_cartao
-            if c.id_cartao == id_cartao and c.id_fatura is None
-            and c.data_compra.year == ano and c.data_compra.month == mes
-        ]
-        if not elegiveis:
-            return None
-
-        total = round(sum(c.valor for c in elegiveis), 2)
-        fatura = Fatura(
-            id_cartao=id_cartao,
-            data_fechamento=data_fechamento_real,
-            data_vencimento=data_vencimento_real,
-            valor_total=total,
-            status="Fechada",
-        )
-        self.faturas.append(fatura)
-
-        for c in elegiveis:
-            c.id_fatura = fatura.id_fatura
-
-        return fatura
 
     def fechar_fatura(
         self, id_cartao: str, data_fechamento_real: date, data_vencimento_real: date
@@ -1666,4 +1634,43 @@ class GerenciadorContas:
         self.fornecedores.sort()
         
         return novos, duplicados
+
+
+#---------------------------------------
+# registra compras no histórico
+#---------------------------------------
+
+    def registrar_compra_no_historico(
+        self,
+        id_compra_cartao: str,
+        descricao: str,
+        valor: float,
+        data_compra: date,
+        categoria: str,
+        tag: str = "",
+        observacao: str = "",
+    ) -> bool:
+        """
+        Registra uma compra de cartão no histórico como transação informativa.
+        Não afeta o saldo, apenas para visualização e relatórios.
+        """
+        # Cria uma transação informativa (não afeta saldo)
+        transacao = Transacao(
+            id_conta="CARTAO_CREDITO",  # ID especial para compras de cartão
+            descricao=descricao,
+            valor=valor,
+            tipo="Compra Cartão",
+            data_transacao=data_compra,
+            categoria=categoria,
+            observacao=observacao,
+            tag=tag,
+            id_compra_cartao=id_compra_cartao,
+            informativa=True,
+        )
+        
+        self.transacoes.append(transacao)
+        return True
+
+
+
 
