@@ -457,31 +457,31 @@ with tab_transacoes:
 
 st.divider()
     
-# === CALCULAR PERÍODO ===
-hoje = date.today()
-
-if periodo == "Últimos 30 dias":
-    data_inicio = hoje - timedelta(days=30)
-    data_fim = hoje
-elif periodo == "Últimos 3 meses":
-    data_inicio = hoje - relativedelta(months=3)
-    data_fim = hoje
-elif periodo == "Últimos 6 meses":
-    data_inicio = hoje - relativedelta(months=6)
-    data_fim = hoje
-elif periodo == "Este ano":
-    data_inicio = date(hoje.year, 1, 1)
-    data_fim = hoje
-elif periodo == "Ano passado":
-    data_inicio = date(hoje.year - 1, 1, 1)
-    data_fim = date(hoje.year - 1, 12, 31)
-elif periodo == "Período Personalizado":
-    data_inicio = data_inicio_custom
-    data_fim = data_fim_custom
-else:  # Tudo
-    data_inicio = None
-    data_fim = None
+    # === CALCULAR PERÍODO ===
+    hoje = date.today()
     
+    if periodo == "Últimos 30 dias":
+        data_inicio = hoje - timedelta(days=30)
+        data_fim = hoje
+    elif periodo == "Últimos 3 meses":
+        data_inicio = hoje - relativedelta(months=3)
+        data_fim = hoje
+    elif periodo == "Últimos 6 meses":
+        data_inicio = hoje - relativedelta(months=6)
+        data_fim = hoje
+    elif periodo == "Este ano":
+        data_inicio = date(hoje.year, 1, 1)
+        data_fim = hoje
+    elif periodo == "Ano passado":
+        data_inicio = date(hoje.year - 1, 1, 1)
+        data_fim = date(hoje.year - 1, 12, 31)
+    elif periodo == "Período Personalizado":
+        data_inicio = data_inicio_custom
+        data_fim = data_fim_custom
+    else:  # Tudo
+        data_inicio = None
+        data_fim = None
+        
     # === APLICAR FILTROS ===
     transacoes_filtradas = st.session_state.gerenciador.transacoes.copy()
     
@@ -605,13 +605,13 @@ else:  # Tudo
     st.error("🔍 FIM DO DIAGNÓSTICO DETALHADO")
     st.divider()
     # === FIM DO DIAGNÓSTICO ===
-
-
-
-
-
-
-
+    
+    
+    
+    
+    
+    
+    
 
     
 
