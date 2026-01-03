@@ -404,6 +404,16 @@ with tab_transacoes:
         )
     
     st.divider()
+
+    # === FILTRO DE TRANSAÇÕES INFORMATIVAS ===
+    mostrar_compras_cartao = st.checkbox(
+    "💳 Mostrar compras de cartão no histórico",
+    value=True,
+    help="Exibe as compras individuais de cartão de crédito (transações informativas que não afetam o saldo)",
+    key="filtro_mostrar_compras_cartao"
+)
+
+st.divider()
     
     # === CALCULAR PERÍODO ===
     hoje = date.today()
@@ -476,10 +486,20 @@ with tab_transacoes:
             t for t in transacoes_filtradas
             if t.tipo == tipo_filtro
         ]
-    
+
+    # Filtro de compras de cartão (transações informativas)
+    if not mostrar_compras_cartao:
+        transacoes_filtradas = [
+            t for t in transacoes_filtradas
+            if not getattr(t, 'informativa', False)
+        ]
+
     # === ESTATÍSTICAS ===
-    total_receitas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Receita")
-    total_despesas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Despesa")
+    # Exclui transações informativas do cálculo (compras de cartão não afetam saldo)
+    transacoes_para_calculo = [t for t in transacoes_filtradas if not getattr(t, 'informativa', False)]
+    
+    total_receitas = sum(t.valor for t in transacoes_para_calculo if t.tipo == "Receita")
+    total_despesas = sum(t.valor for t in transacoes_para_calculo if t.tipo == "Despesa")
     saldo_periodo = total_receitas - total_despesas
     
     col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
@@ -498,6 +518,7 @@ with tab_transacoes:
         st.metric("📈 Saldo Período", formatar_moeda(saldo_periodo), delta_color=delta_color)
     
     st.divider()
+
     
     # === EXIBIÇÃO DAS TRANSAÇÕES ===
     if not transacoes_filtradas:
@@ -529,8 +550,11 @@ with tab_transacoes:
                 st.text(nome_conta)
             
             with col3:
+                # Identifica compras de cartão
+                if getattr(t, 'informativa', False) and t.tipo == "Compra Cartão":
+                    st.text(f"💳 {t.descricao}")
                 # Destaque para vendas de investimento
-                if t.categoria == "Venda de Investimento":
+                elif t.categoria == "Venda de Investimento":
                     if "Lucro:" in t.descricao:
                         st.text(f"💰 {t.descricao}")
                     elif "Prejuízo:" in t.descricao:
@@ -539,15 +563,23 @@ with tab_transacoes:
                         st.text(t.descricao)
                 else:
                     st.text(t.descricao)
+
             
             with col4:
-                st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")
+                # Se for transação informativa (compra de cartão)
+                if getattr(t, 'informativa', False):
+                    st.markdown(f":gray[**ℹ️ {formatar_moeda(t.valor)}**]")
+                else:
+                    st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")           
             
             with col5:
-                # Botão de excluir
-                if st.button("🗑️", key=f"del_trans_{t.id_transacao}", help="Excluir transação"):
-                    st.session_state.transacao_para_excluir = t.id_transacao
-                    st.rerun()
+                # Não permite excluir compras de cartão (são gerenciadas pelo módulo de cartões)
+                if not getattr(t, 'informativa', False):
+                    if st.button("🗑️", key=f"del_trans_{t.id_transacao}", help="Excluir transação"):
+                        st.session_state.transacao_para_excluir = t.id_transacao
+                        st.rerun()
+                else:
+                    st.text("")  # Espaço vazio para manter alinhamento
             
             # === DETALHES SEMPRE VISÍVEIS ===
             col_det1, col_det2, col_det3 = st.columns([2, 2, 3])
