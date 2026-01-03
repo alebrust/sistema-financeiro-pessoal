@@ -519,6 +519,54 @@ else:  # Tudo
     
     st.divider()
 
+
+
+
+
+
+
+
+
+
+
+
+
+    # === DIAGNÓSTICO TEMPORÁRIO ===
+    st.write("---")
+    st.write("### 🔍 DIAGNÓSTICO DE DEPURAÇÃO")
+    
+    st.write(f"**Total de transações no sistema:** {len(st.session_state.gerenciador.transacoes)}")
+    st.write(f"**Transações após todos os filtros:** {len(transacoes_filtradas)}")
+    st.write(f"**Checkbox 'Mostrar compras de cartão' está:** {'✅ Marcado' if mostrar_compras_cartao else '❌ Desmarcado'}")
+    
+    # Mostra detalhes das primeiras transações
+    if st.session_state.gerenciador.transacoes:
+        st.write("**Primeiras 3 transações do sistema (antes dos filtros):**")
+        for i, t in enumerate(st.session_state.gerenciador.transacoes[:3]):
+            informativa = getattr(t, 'informativa', False)
+            st.write(f"{i+1}. {t.data.strftime('%d/%m/%Y')} | {t.descricao} | R$ {t.valor:.2f} | Tipo: {t.tipo} | Informativa: {informativa}")
+    else:
+        st.error("⚠️ **PROBLEMA:** Não há NENHUMA transação no sistema!")
+    
+    # Verifica se o filtro de compras de cartão está removendo tudo
+    transacoes_sem_filtro_cartao = st.session_state.gerenciador.transacoes.copy()
+    st.write(f"**Transações SEM filtro de cartão:** {len(transacoes_sem_filtro_cartao)}")
+    
+    st.write("---")
+    # === FIM DO DIAGNÓSTICO ===
+
+
+
+
+
+
+
+
+
+
+
+    
+
     
     # === EXIBIÇÃO DAS TRANSAÇÕES ===
     if not transacoes_filtradas:
