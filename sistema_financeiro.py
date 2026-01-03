@@ -37,6 +37,8 @@ class Transacao:
         observacao: str = "",
         tag: str = "",
         id_transacao: Optional[str] = None,
+        id_compra_cartao: Optional[str] = None,  # ← ADICIONE ESTE PARÂMETRO
+        informativa: bool = False,  # ← ADICIONE ESTE PARÂMETRO
     ):
         self.id_transacao = id_transacao or str(uuid4())
         self.id_conta = id_conta
@@ -47,6 +49,8 @@ class Transacao:
         self.categoria = categoria
         self.observacao = observacao
         self.tag = tag
+        self.id_compra_cartao = id_compra_cartao  # ← ADICIONE ESTA LINHA
+        self.informativa = informativa  # ← ADICIONE ESTA LINHA
 
     def para_dict(self) -> Dict[str, Any]:
         return {
@@ -59,6 +63,8 @@ class Transacao:
             "categoria": self.categoria,
             "observacao": self.observacao,
             "tag": self.tag,
+            "id_compra_cartao": self.id_compra_cartao,  # ← ADICIONE ESTA LINHA
+            "informativa": self.informativa,  # ← ADICIONE ESTA LINHA
         }
 
 
