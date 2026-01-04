@@ -1421,7 +1421,7 @@ class GerenciadorContas:
         #        data_transacao=data_pagamento,
         #        categoria="Cartão de Crédito",
         #    )
-        )
+        #)
         return True
 
     def reabrir_fatura(self, id_fatura: str) -> bool:
