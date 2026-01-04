@@ -362,6 +362,18 @@ with tab_transacoes:
             index=0,
             key="filtro_conta_hist"
         )
+
+
+         # Filtro por cartão
+            cartoes_opcoes = ["Todos"] + [cart.nome for cart in st.session_state.gerenciador.cartoes_credito]
+            cartao_filtro = st.selectbox(
+                "💳 Cartão:",
+                options=cartoes_opcoes,
+                index=0,
+                key="filtro_cartao_hist",
+                help="Filtra apenas compras do cartão selecionado"
+            )
+
     
     with col_filtro2:
         # Filtro por categoria
@@ -455,6 +467,18 @@ with tab_transacoes:
             transacoes_filtradas = [
                 t for t in transacoes_filtradas
                 if t.id_conta == conta_selecionada.id_conta
+            ]
+
+    # Filtro por cartão
+    if cartao_filtro != "Todos":
+        cartao_selecionado = next((cart for cart in st.session_state.gerenciador.cartoes_credito if cart.nome == cartao_filtro), None)
+        if cartao_selecionado:
+            # Filtra apenas compras de cartão do cartão selecionado
+            transacoes_filtradas = [
+                t for t in transacoes_filtradas
+                if getattr(t, 'informativa', False) and hasattr(t, 'id_compra_cartao') and
+                any(c.id_cartao == cartao_selecionado.id_cartao and c.id_compra == t.id_compra_cartao 
+                    for c in st.session_state.gerenciador.compras_cartao)
             ]
     
     # Filtro por categoria
