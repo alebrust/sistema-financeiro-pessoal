@@ -365,14 +365,14 @@ with tab_transacoes:
 
 
          # Filtro por cartão
-            cartoes_opcoes = ["Todos"] + [cart.nome for cart in st.session_state.gerenciador.cartoes_credito]
-            cartao_filtro = st.selectbox(
-                "💳 Cartão:",
-                options=cartoes_opcoes,
-                index=0,
-                key="filtro_cartao_hist",
-                help="Filtra apenas compras do cartão selecionado"
-            )
+        cartoes_opcoes = ["Todos"] + [cart.nome for cart in st.session_state.gerenciador.cartoes_credito]
+        cartao_filtro = st.selectbox(
+            "💳 Cartão:",
+            options=cartoes_opcoes,
+            index=0,
+            key="filtro_cartao_hist",
+            help="Filtra apenas compras do cartão selecionado"
+        )
 
     
     with col_filtro2:
