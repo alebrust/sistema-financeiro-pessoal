@@ -315,53 +315,9 @@ with tab_dashboard:
         else:
             st.info("Adicione pelo menos duas contas para realizar transferências.")
 
-
-# --- HISTÓRICO ---
 # --- HISTÓRICO ---
 with tab_transacoes:
     st.header("Histórico de Todas as Transações")
-
-    
-    # === DIAGNÓSTICO FORÇADO ===
-    st.error("=" * 50)
-    st.error("DIAGNÓSTICO INICIADO")
-    st.error("=" * 50)
-    
-    try:
-        total = len(st.session_state.gerenciador.transacoes)
-        st.success(f"Total de transações: {total}")
-        
-        # Verifica se transacoes_filtradas existe
-        if 'transacoes_filtradas' in locals():
-            st.info(f"Transações filtradas: {len(transacoes_filtradas)}")
-        else:
-            st.warning("Variável 'transacoes_filtradas' ainda não existe aqui")
-        
-    except Exception as e:
-        st.error(f"ERRO: {e}")
-    
-    st.error("=" * 50)
-    st.divider()
-    # === FIM DO DIAGNÓSTICO ===
-
-
-
-    
-    # === DIAGNÓSTICO TEMPORÁRIO ===
-    st.error("🔍 INÍCIO DO DIAGNÓSTICO")
-    st.write(f"**Total de transações no sistema:** {len(st.session_state.gerenciador.transacoes)}")
-    
-    if st.session_state.gerenciador.transacoes:
-        st.success("✅ Há transações no sistema!")
-        st.write("**Primeiras 3 transações:**")
-        for i, t in enumerate(st.session_state.gerenciador.transacoes[:3]):
-            st.write(f"{i+1}. Data: {t.data} | Descrição: {t.descricao} | Valor: R$ {t.valor:.2f}")
-    else:
-        st.error("❌ NÃO HÁ TRANSAÇÕES NO SISTEMA!")
-    
-    st.error("🔍 FIM DO DIAGNÓSTICO")
-    st.divider()
-    # === FIM DO DIAGNÓSTICO ===
     
     # === FILTROS ===
     from datetime import timedelta
@@ -547,74 +503,6 @@ with tab_transacoes:
             if not getattr(t, 'informativa', False)
         ]
     
-    # === DIAGNÓSTICO DETALHADO DOS FILTROS ===
-    st.error("🔍 DIAGNÓSTICO DETALHADO")
-    
-    # Total inicial
-    total_inicial = len(st.session_state.gerenciador.transacoes)
-    st.write(f"**1. Total inicial de transações:** {total_inicial}")
-    
-    # Após filtro de período
-    transacoes_teste = st.session_state.gerenciador.transacoes.copy()
-    if data_inicio and data_fim:
-        transacoes_teste = [t for t in transacoes_teste if data_inicio <= t.data <= data_fim]
-    st.write(f"**2. Após filtro de período ({periodo}):** {len(transacoes_teste)}")
-    st.write(f"   - Data início: {data_inicio if data_inicio else 'Sem filtro'}")
-    st.write(f"   - Data fim: {data_fim if data_fim else 'Sem filtro'}")
-    
-    # Mostra algumas datas de transações para comparar
-    if total_inicial > 0:
-        datas_exemplo = sorted([t.data for t in st.session_state.gerenciador.transacoes])
-        st.write(f"   - Data mais antiga no sistema: {datas_exemplo[0]}")
-        st.write(f"   - Data mais recente no sistema: {datas_exemplo[-1]}")
-    
-    # Após filtro de conta
-    if conta_filtro != "Todas":
-        conta_selecionada = next((c for c in st.session_state.gerenciador.obter_contas_ativas() if c.nome == conta_filtro), None)
-        if conta_selecionada:
-            transacoes_teste = [t for t in transacoes_teste if t.id_conta == conta_selecionada.id_conta]
-    st.write(f"**3. Após filtro de conta ({conta_filtro}):** {len(transacoes_teste)}")
-    
-    # Após filtro de categoria
-    if categoria_filtro != "Todas":
-        transacoes_teste = [t for t in transacoes_teste if t.categoria == categoria_filtro]
-    st.write(f"**4. Após filtro de categoria ({categoria_filtro}):** {len(transacoes_teste)}")
-    
-    # Após filtro de TAG
-    if tag_filtro != "Todas":
-        transacoes_teste = [t for t in transacoes_teste if getattr(t, 'tag', '') == tag_filtro]
-    st.write(f"**5. Após filtro de TAG ({tag_filtro}):** {len(transacoes_teste)}")
-    
-    # Após filtro de descrição
-    if descricao_filtro:
-        transacoes_teste = [t for t in transacoes_teste if descricao_filtro.lower() in t.descricao.lower()]
-    st.write(f"**6. Após filtro de descrição ('{descricao_filtro}'):** {len(transacoes_teste)}")
-    
-    # Após filtro de tipo
-    if tipo_filtro != "Todos":
-        transacoes_teste = [t for t in transacoes_teste if t.tipo == tipo_filtro]
-    st.write(f"**7. Após filtro de tipo ({tipo_filtro}):** {len(transacoes_teste)}")
-    
-    # Após filtro de compras de cartão
-    if not mostrar_compras_cartao:
-        transacoes_teste = [t for t in transacoes_teste if not getattr(t, 'informativa', False)]
-    st.write(f"**8. Após filtro de compras de cartão (mostrar={mostrar_compras_cartao}):** {len(transacoes_teste)}")
-    
-    st.write(f"**RESULTADO FINAL:** {len(transacoes_filtradas)} transações")
-    
-    st.error("🔍 FIM DO DIAGNÓSTICO DETALHADO")
-    st.divider()
-    # === FIM DO DIAGNÓSTICO ===
-    
-    
-    
-    
-    
-    
-    
-
-    
-
     # === ESTATÍSTICAS ===
     # Exclui transações informativas do cálculo (compras de cartão não afetam saldo)
     transacoes_para_calculo = [t for t in transacoes_filtradas if not getattr(t, 'informativa', False)]
@@ -639,55 +527,6 @@ with tab_transacoes:
         st.metric("📈 Saldo Período", formatar_moeda(saldo_periodo), delta_color=delta_color)
     
     st.divider()
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # === DIAGNÓSTICO TEMPORÁRIO ===
-    st.write("---")
-    st.write("### 🔍 DIAGNÓSTICO DE DEPURAÇÃO")
-    
-    st.write(f"**Total de transações no sistema:** {len(st.session_state.gerenciador.transacoes)}")
-    st.write(f"**Transações após todos os filtros:** {len(transacoes_filtradas)}")
-    st.write(f"**Checkbox 'Mostrar compras de cartão' está:** {'✅ Marcado' if mostrar_compras_cartao else '❌ Desmarcado'}")
-    
-    # Mostra detalhes das primeiras transações
-    if st.session_state.gerenciador.transacoes:
-        st.write("**Primeiras 3 transações do sistema (antes dos filtros):**")
-        for i, t in enumerate(st.session_state.gerenciador.transacoes[:3]):
-            informativa = getattr(t, 'informativa', False)
-            st.write(f"{i+1}. {t.data.strftime('%d/%m/%Y')} | {t.descricao} | R$ {t.valor:.2f} | Tipo: {t.tipo} | Informativa: {informativa}")
-    else:
-        st.error("⚠️ **PROBLEMA:** Não há NENHUMA transação no sistema!")
-    
-    # Verifica se o filtro de compras de cartão está removendo tudo
-    transacoes_sem_filtro_cartao = st.session_state.gerenciador.transacoes.copy()
-    st.write(f"**Transações SEM filtro de cartão:** {len(transacoes_sem_filtro_cartao)}")
-    
-    st.write("---")
-    # === FIM DO DIAGNÓSTICO ===
-
-
-
-
-
-
-
-
-
-
-
-    
-
     
     # === EXIBIÇÃO DAS TRANSAÇÕES ===
     if not transacoes_filtradas:
