@@ -1693,7 +1693,7 @@ class GerenciadorContas:
                     id_compra_cartao=compra.id_compra,
                     descricao=compra.descricao,
                     valor=compra.valor,
-                    data_compra=data_vencimento,
+                    data_compra=compra.data_compra,
                     categoria=compra.categoria,
                     tag=compra.tag,
                     observacao=compra.observacao,
