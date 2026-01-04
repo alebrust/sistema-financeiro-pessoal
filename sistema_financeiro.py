@@ -1412,15 +1412,15 @@ class GerenciadorContas:
         conta.saldo -= valor
         fatura.status = "Paga"
 
-        self.transacoes.append(
-            Transacao(
-                id_conta=conta.id_conta,
-                descricao=f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}",
-                valor=valor,
-                tipo="Despesa",
-                data_transacao=data_pagamento,
-                categoria="Cartão de Crédito",
-            )
+        #self.transacoes.append(
+        #    Transacao(
+        #        id_conta=conta.id_conta,
+        #        descricao=f"Pagamento Fatura {fatura.data_vencimento.strftime('%m/%Y')}",
+        #        valor=valor,
+        #        tipo="Despesa",
+        #        data_transacao=data_pagamento,
+        #        categoria="Cartão de Crédito",
+        #    )
         )
         return True
 
@@ -1659,13 +1659,13 @@ class GerenciadorContas:
             id_conta="CARTAO_CREDITO",  # ID especial para compras de cartão
             descricao=descricao,
             valor=valor,
-            tipo="Compra Cartão",
+            tipo="Despesa",
             data_transacao=data_compra,
             categoria=categoria,
             observacao=observacao,
             tag=tag,
             id_compra_cartao=id_compra_cartao,
-            informativa=True,
+            informativa=False,
         )
         
         self.transacoes.append(transacao)
