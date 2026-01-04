@@ -1672,5 +1672,36 @@ class GerenciadorContas:
         return True
 
 
+# MIGRA CONTAS DO CARTÃO PARA HISTÓRICO
+
+    def migrar_compras_para_historico(self) -> int:
+        """
+        Migra compras de cartão existentes para o histórico.
+        Útil para popular o histórico com compras já registradas.
+        """
+        compras_migradas = 0
+        
+        for compra in self.compras_cartao:
+            # Verifica se já existe no histórico
+            ja_existe = any(
+                getattr(t, 'id_compra_cartao', None) == compra.id_compra
+                for t in self.transacoes
+            )
+            
+            if not ja_existe:
+                self.registrar_compra_no_historico(
+                    id_compra_cartao=compra.id_compra,
+                    descricao=compra.descricao,
+                    valor=compra.valor,
+                    data_compra=compra.data_compra_real,
+                    categoria=compra.categoria,
+                    tag=compra.tag,
+                    observacao=compra.observacao,
+                )
+                compras_migradas += 1
+        
+        return compras_migradas
+
+
 
 
