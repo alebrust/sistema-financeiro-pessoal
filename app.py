@@ -364,7 +364,7 @@ with tab_transacoes:
         )
 
 
-         # Filtro por cartão
+        # Filtro por cartão
         cartoes_opcoes = ["Todos"] + [cart.nome for cart in st.session_state.gerenciador.cartoes_credito]
         cartao_filtro = st.selectbox(
             "💳 Cartão:",
