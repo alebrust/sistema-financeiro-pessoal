@@ -1723,6 +1723,27 @@ with tab_config:
                 st.rerun()
 
 
+# MIGRAÇÃO DO HISTÓRICO DO CARTÃO PARA A ABA HISTÓRICO DO SISTEMA
+
+
+    st.divider()
+    st.subheader("🔄 Migração de Dados")
+    st.caption("Migre compras de cartão existentes para o histórico de transações.")
+    
+    st.info("💡 **Quando usar:** Se você já tinha compras de cartão cadastradas antes desta atualização, use este botão para adicioná-las ao histórico.")
+    
+    if st.button("🔄 Migrar Compras para Histórico", type="primary", use_container_width=True):
+        migradas = st.session_state.gerenciador.migrar_compras_para_historico()
+        if migradas > 0:
+            st.session_state.gerenciador.salvar_dados()
+            st.success(f"✅ {migradas} compras migradas para o histórico com sucesso!")
+            st.rerun()
+        else:
+            st.info("ℹ️ Todas as compras já estão no histórico!")
+
+
+
+
 # --- GERENCIAR CONTAS (ARQUIVAR/DESARQUIVAR) ---  ← ADICIONE AQUI (LOGO APÓS)
 with tab_gerenciar:
     st.header("📦 Gerenciar Contas")
