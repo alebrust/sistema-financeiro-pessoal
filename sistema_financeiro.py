@@ -1339,7 +1339,7 @@ class GerenciadorContas:
                 id_compra_cartao=nova.id_compra,
                 descricao=desc_parcela,
                 valor=valor_parcela,
-                data_compra=data_compra_parcela,  # Usa a data da parcela
+                data_compra=data_vencimento,  # Usa a data da parcela
                 categoria=categoria,
                 tag=tag,
                 observacao=observacao,
