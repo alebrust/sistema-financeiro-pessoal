@@ -458,7 +458,7 @@ with tab_transacoes:
     st.divider()
     
     # === CALCULAR PERÍODO ===
-    hoje = date.today()
+        hoje = date.today()
     
     if periodo == "Últimos 30 dias":
         data_inicio = hoje - timedelta(days=30)
