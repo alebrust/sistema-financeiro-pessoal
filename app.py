@@ -1786,6 +1786,33 @@ with tab_config:
             st.info("ℹ️ Todas as compras já estão no histórico!")
 
 
+# LIMPEZA DO HISTÓRICO DOS REGISTROS DE CARTÕES
+
+    st.divider()
+    st.subheader("🧹 Limpeza de Dados")
+    st.caption("Remove transações informativas (compras de cartão) do histórico.")
+    
+    st.warning("⚠️ **Atenção:** Isso vai remover todas as compras de cartão do histórico. Execute a migração novamente depois para recriá-las com as datas corretas.")
+    
+    if st.button("🧹 Limpar Compras do Histórico", type="secondary", use_container_width=True):
+        # Remove todas as transações informativas
+        transacoes_antes = len(st.session_state.gerenciador.transacoes)
+        st.session_state.gerenciador.transacoes = [
+            t for t in st.session_state.gerenciador.transacoes
+            if not getattr(t, 'informativa', False)
+        ]
+        transacoes_depois = len(st.session_state.gerenciador.transacoes)
+        removidas = transacoes_antes - transacoes_depois
+        
+        if removidas > 0:
+            st.session_state.gerenciador.salvar_dados()
+            st.success(f"✅ {removidas} compras removidas do histórico!")
+            st.info("💡 Agora execute a migração novamente para recriar as compras com as datas corretas.")
+            st.rerun()
+        else:
+            st.info("ℹ️ Não há compras de cartão no histórico!")
+
+
 
 
 # --- GERENCIAR CONTAS (ARQUIVAR/DESARQUIVAR) ---  ← ADICIONE AQUI (LOGO APÓS)
