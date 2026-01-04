@@ -540,9 +540,29 @@ with tab_transacoes:
         )
         
         for t in transacoes_ordenadas:
-            # Busca nome da conta
-            conta = st.session_state.gerenciador.buscar_conta_por_id(t.id_conta)
-            nome_conta = conta.nome if conta else "Conta não encontrada"
+            # Busca nome da conta ou cartão
+            if getattr(t, 'informativa', False) and hasattr(t, 'id_compra_cartao'):
+                # É uma compra de cartão - busca o nome do cartão
+                compra = next(
+                    (c for c in st.session_state.gerenciador.compras_cartao 
+                     if c.id_compra == t.id_compra_cartao),
+                    None
+                )
+                if compra:
+                    # Busca o cartão pelo ID
+                    cartao = next(
+                        (cart for cart in st.session_state.gerenciador.cartoes 
+                         if cart.id_cartao == compra.id_cartao),
+                        None
+                    )
+                    nome_conta = f"💳 {cartao.nome}" if cartao else "💳 Cartão de Crédito"
+                else:
+                    nome_conta = "💳 Cartão de Crédito"
+            else:
+                # É uma transação normal - busca a conta
+                conta = st.session_state.gerenciador.buscar_conta_por_id(t.id_conta)
+                nome_conta = conta.nome if conta else "Conta não encontrada"
+
             
             # Cor baseada no tipo
             cor_valor = "green" if t.tipo == "Receita" else "red"
