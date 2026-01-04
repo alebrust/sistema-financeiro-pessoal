@@ -415,16 +415,6 @@ with tab_transacoes:
     
     st.divider()
     
-    # === FILTRO DE TRANSAÇÕES INFORMATIVAS ===
-    mostrar_compras_cartao = st.checkbox(
-        "💳 Mostrar compras de cartão no histórico",
-        value=True,
-        help="Exibe as compras individuais de cartão de crédito (transações informativas que não afetam o saldo)",
-        key="filtro_mostrar_compras_cartao"
-    )
-    
-    st.divider()
-    
     # === CALCULAR PERÍODO ===
     hoje = date.today()
     
@@ -509,30 +499,10 @@ with tab_transacoes:
             if t.tipo == tipo_filtro
         ]
 
-    # Filtro de compras de cartão (transações informativas)
-    if not mostrar_compras_cartao:
-        transacoes_filtradas = [
-            t for t in transacoes_filtradas
-            if not getattr(t, 'informativa', False)
-        ]
-
-
-
-
-
-    # Filtro de compras de cartão (transações informativas)
-    if not mostrar_compras_cartao:
-        transacoes_filtradas = [
-            t for t in transacoes_filtradas
-            if not getattr(t, 'informativa', False)
-        ]
-    
     # === ESTATÍSTICAS ===
-    # Exclui transações informativas do cálculo (compras de cartão não afetam saldo)
-    transacoes_para_calculo = [t for t in transacoes_filtradas if not getattr(t, 'informativa', False)]
-    
-    total_receitas = sum(t.valor for t in transacoes_para_calculo if t.tipo == "Receita")
-    total_despesas = sum(t.valor for t in transacoes_para_calculo if t.tipo == "Despesa")
+    # Agora todas as transações contam (incluindo compras de cartão)
+    total_receitas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Receita")
+    total_despesas = sum(t.valor for t in transacoes_filtradas if t.tipo == "Despesa")
     saldo_periodo = total_receitas - total_despesas
     
     col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
@@ -565,7 +535,7 @@ with tab_transacoes:
         
         for t in transacoes_ordenadas:
             # Busca nome da conta ou cartão
-            if getattr(t, 'informativa', False) and hasattr(t, 'id_compra_cartao'):
+            if hasattr(t, 'id_compra_cartao') and t.id_compra_cartao:
                 # É uma compra de cartão - busca o nome do cartão
                 compra = next(
                     (c for c in st.session_state.gerenciador.compras_cartao 
@@ -586,7 +556,6 @@ with tab_transacoes:
                 # É uma transação normal - busca a conta
                 conta = st.session_state.gerenciador.buscar_conta_por_id(t.id_conta)
                 nome_conta = conta.nome if conta else "Conta não encontrada"
-
             
             # Cor baseada no tipo
             cor_valor = "green" if t.tipo == "Receita" else "red"
@@ -603,7 +572,7 @@ with tab_transacoes:
             
             with col3:
                 # Identifica compras de cartão
-                if getattr(t, 'informativa', False) and t.tipo == "Compra Cartão":
+                if hasattr(t, 'id_compra_cartao') and t.id_compra_cartao:
                     st.text(f"💳 {t.descricao}")
                 # Destaque para vendas de investimento
                 elif t.categoria == "Venda de Investimento":
@@ -615,18 +584,14 @@ with tab_transacoes:
                         st.text(t.descricao)
                 else:
                     st.text(t.descricao)
-
             
             with col4:
-                # Se for transação informativa (compra de cartão)
-                if getattr(t, 'informativa', False):
-                    st.markdown(f":gray[**ℹ️ {formatar_moeda(t.valor)}**]")
-                else:
-                    st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")           
+                # Compras de cartão aparecem como despesas normais
+                st.markdown(f":{cor_valor}[**{sinal}{formatar_moeda(t.valor)}**]")
             
             with col5:
                 # Não permite excluir compras de cartão (são gerenciadas pelo módulo de cartões)
-                if not getattr(t, 'informativa', False):
+                if not (hasattr(t, 'id_compra_cartao') and t.id_compra_cartao):
                     if st.button("🗑️", key=f"del_trans_{t.id_transacao}", help="Excluir transação"):
                         st.session_state.transacao_para_excluir = t.id_transacao
                         st.rerun()
@@ -679,6 +644,7 @@ with tab_transacoes:
                         st.rerun()
             
             st.divider()
+
 # --- CONTAS ---
 with tab_contas:
     st.header("Gerenciar Contas")
