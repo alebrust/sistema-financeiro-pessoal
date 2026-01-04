@@ -446,19 +446,19 @@ with tab_transacoes:
         )
     
     st.divider()
-
+    
     # === FILTRO DE TRANSAÇÕES INFORMATIVAS ===
     mostrar_compras_cartao = st.checkbox(
-    "💳 Mostrar compras de cartão no histórico",
-    value=True,
-    help="Exibe as compras individuais de cartão de crédito (transações informativas que não afetam o saldo)",
-    key="filtro_mostrar_compras_cartao"
-)
-
+        "💳 Mostrar compras de cartão no histórico",
+        value=True,
+        help="Exibe as compras individuais de cartão de crédito (transações informativas que não afetam o saldo)",
+        key="filtro_mostrar_compras_cartao"
+    )
+    
     st.divider()
     
     # === CALCULAR PERÍODO ===
-        hoje = date.today()
+    hoje = date.today()
     
     if periodo == "Últimos 30 dias":
         data_inicio = hoje - timedelta(days=30)
@@ -481,7 +481,7 @@ with tab_transacoes:
     else:  # Tudo
         data_inicio = None
         data_fim = None
-        
+    
     # === APLICAR FILTROS ===
     transacoes_filtradas = st.session_state.gerenciador.transacoes.copy()
     
