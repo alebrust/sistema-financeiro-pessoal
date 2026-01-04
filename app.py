@@ -551,7 +551,7 @@ with tab_transacoes:
                 if compra:
                     # Busca o cartão pelo ID
                     cartao = next(
-                        (cart for cart in st.session_state.gerenciador.cartoes 
+                        (cart for cart in st.session_state.gerenciador.cartoes_credito 
                          if cart.id_cartao == compra.id_cartao),
                         None
                     )
